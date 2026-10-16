@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dashy, NowPlayingBlock, useSpotify } from '../src/react';
+import { DashyBody, NowPlayingBlock, useSpotify } from '../src/react';
 import { ALL_STATES, type DashyState } from '../src';
 import { demoTrack } from './demo';
 import { useNow } from './useNow';
@@ -24,7 +24,7 @@ export function App() {
       <h1 className="sr">Dashy</h1>
       <section aria-labelledby="av" style={card}>
         <h2 id="av" className="sr">Avatar</h2>
-        <Dashy state={state} size="min(60vmin,280px)" />
+        <div style={{ width: 'min(100%,26rem)', aspectRatio: '1' }}><DashyBody state={state} /></div>
         <div role="group" aria-label="Stemming van Dashy" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
           {ALL_STATES.map(s => <button key={s} type="button" aria-pressed={s === state} onClick={() => setState(s)} style={chip(s === state)}>{LABEL[s]}</button>)}
         </div>

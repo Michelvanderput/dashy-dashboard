@@ -162,3 +162,16 @@ describe('small variant', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('<DashyBody />', () => {
+  it('is a block that stays where it is: only the eyes are drawn on it, labelled for screen readers, and it follows the state', async () => {
+    const { DashyBody } = await import('../../src/react');
+    const { container, rerender } = render(<DashyBody state="happy" reducedMotion />);
+    const host = container.firstElementChild as HTMLElement;
+    expect(host.style.background).toMatch(/#fff|255, 255, 255/);
+    expect(host.querySelector('.outline')).toBeNull(); // no body of its own: the block is the body
+    expect(host.querySelector('svg[role="img"] title')!.textContent).toBe('Dashy is blij');
+    rerender(<DashyBody state="angry" reducedMotion />);
+    expect(host.querySelector('svg[role="img"] title')!.textContent).toBe('Dashy is boos');
+  });
+});
