@@ -18,3 +18,7 @@ export { ALL_STATES, renderSvg, settledGeometry, stillGeometry } from './static'
 export type { StaticOptions } from './static';
 export { faceMotion } from './render';
 export type { FaceMotion, FaceMotionOptions } from './render';
+export { TASK_DRIVER_CONFIG, nowTask, parseDashboard, parseMinutes, parseWhen, snapshotEvents } from './tasks';
+export type { DashTask, DashboardSnapshot } from './tasks';
+export { adoptTasksHash, forgetTasksConnection, loadTasksConnection } from './tasks-connection';
+export type { TasksConnection } from './tasks-connection';

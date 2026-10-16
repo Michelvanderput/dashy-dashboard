@@ -3,10 +3,10 @@
  * Plain JSON-RPC with no SDK: initialize, ping, tools/list, tools/call; batches and notifications are handled.
  * Few tools that work in batches and return compact answers, so a braindump costs few tokens.
  */
-import { addTasks, dashboard, reorderTasks, setAppointment, setDone, updateTasks } from './ops';
-import { authorized, tokenOf } from './auth';
-import { InputError, BATCH_MAX, CATEGORIES, NOTE_MAX, TITLE_MAX } from './model';
-import type { Store } from './store';
+import { addTasks, dashboard, reorderTasks, setAppointment, setDone, updateTasks } from './ops.js';
+import { authorized, tokenOf } from './auth.js';
+import { InputError, BATCH_MAX, CATEGORIES, NOTE_MAX, TITLE_MAX } from './model.js';
+import type { Store } from './store.js';
 
 export const INSTRUCTIONS = `Dashy is het werkscherm van de gebruiker: één ding tegelijk, met een kleine buddy. Alles gaat via deze tools. Id's zijn 8 tekens.
 Braindump verwerken: 1) haal eerst het dashboard op (voorkomt dubbelen; "today" is de datum van vandaag, "tz" de tijdzone). 2) Maak per taak een korte title (max ${TITLE_MAX} tekens, begint met een werkwoord, liefst 2 tot 5 woorden) zonder tijd, datum of uitleg erin. Het moment gaat in due, details in note (max ${NOTE_MAX}). Voorbeeld: niet "Morgenavond rond 18:00 naar oma (fiets meenemen!)" maar title "Naar oma", due "<morgen> 18:00", note "Fiets meenemen". 3) due is Nederlandse tijd: "YYYY-MM-DD HH:mm", of alleen "YYYY-MM-DD" als alleen de dag bekend is (dan staat er geen tijd en komt de taak die ochtend aan de beurt), of "HH:mm" voor vandaag. Geef bij alles wat op een ander moment moet altijd een due, anders staat het meteen onder Nu. Vage tijden voor vandaag omzetten: vanmiddag 14:00, na de lunch 13:00, vanavond 19:00. 4) Een taak met een tijdstip staat onder Straks en komt pas een uur ervoor onder Nu. 5) category: werk, sport, thuis of prive. 6) Een afspraak van vandaag zet je met appointment, niet als taak. 7) now: true alleen als het eerst moet.

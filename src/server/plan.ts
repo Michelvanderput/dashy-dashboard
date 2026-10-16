@@ -1,6 +1,6 @@
 /** What is "now", what is "later", what is still open from before. Pure: pass the time in. */
-import { localParts, startOfDay, TIME_ZONE } from './time';
-import type { Task } from './model';
+import { localParts, startOfDay, TIME_ZONE } from './time.js';
+import type { Task } from './model.js';
 
 /** A task with a time becomes "Nu doen" this long before it; a date-only task at DATE_ONLY_READY_HOUR that morning. */
 export const READY_LEAD_MS = 60 * 60_000;

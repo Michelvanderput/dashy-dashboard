@@ -1,7 +1,7 @@
 /** Storage. One record per task (a hash), so two writers never overwrite each other's tasks. */
-import type { Task } from './model';
-import { CATEGORIES } from './model';
-import type { Appointment } from './plan';
+import type { Task } from './model.js';
+import { CATEGORIES } from './model.js';
+import type { Appointment } from './plan.js';
 
 export interface Store {
   tasks(): Promise<Task[]>;

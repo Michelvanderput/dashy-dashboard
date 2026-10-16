@@ -1,7 +1,7 @@
 /** The operations on the task list. Validate everything first, then write: a batch with one bad item changes nothing. */
-import { BATCH_MAX, TITLE_MAX, checkCategory, checkNote, checkTitle, InputError, newId, parseDue, type Task } from './model';
-import { buildState, type Appointment, type StateBody } from './plan';
-import type { Store } from './store';
+import { BATCH_MAX, TITLE_MAX, checkCategory, checkNote, checkTitle, InputError, newId, parseDue, type Task } from './model.js';
+import { buildState, type Appointment, type StateBody } from './plan.js';
+import type { Store } from './store.js';
 
 const DONE_KEEP_MS = 3 * 24 * 3600_000;
 const obj = (v: unknown, what: string): Record<string, unknown> => { if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new InputError(`${what} moet een object zijn`); return v as Record<string, unknown>; };

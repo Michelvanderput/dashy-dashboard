@@ -338,3 +338,15 @@ test('env: Supabase wins when configured, then Upstash/KV, otherwise nothing (50
   assert.equal(kind({ SUPABASE_URL: 'https://p', SUPABASE_SERVICE_ROLE_KEY: 'k', KV_REST_API_URL: 'https://r', KV_REST_API_TOKEN: 't' }), 'SupabaseStore');
   assert.equal(kind({ SUPABASE_URL: 'https://p' }), null, 'a url without the key is not configured');
 });
+
+// ---- deployment guard: Vercel runs api/ and src/server as plain ES modules, where an import without a file extension crashes the whole function at load
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+test('every relative import in api/ and src/server has a .js extension (Node ESM refuses the rest)', () => {
+  const files: string[] = [];
+  const walk = (d: string) => { for (const n of readdirSync(d)) { const p = join(d, n); statSync(p).isDirectory() ? walk(p) : /\.ts$/.test(p) && files.push(p); } };
+  walk('api'); walk('src/server');
+  assert.ok(files.length >= 8);
+  const bad = files.flatMap(f => [...readFileSync(f, 'utf8').matchAll(/(?:from|import)\s*\(?\s*'(\.{1,2}\/[^']*)'/g)].filter(m => !/\.(js|json)$/.test(m[1])).map(m => `${f}: ${m[1]}`));
+  assert.deepEqual(bad, []);
+});

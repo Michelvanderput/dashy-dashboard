@@ -5,7 +5,7 @@
  *  - times are epoch ms plus that flag, never Dutch text that every reader has to parse again;
  *  - one record per task, so two writers (Claude and the screen) cannot overwrite each other's tasks.
  */
-import { addDays, localParts, zonedToEpoch, TIME_ZONE } from './time';
+import { addDays, localParts, zonedToEpoch, TIME_ZONE } from './time.js';
 
 export const CATEGORIES = ['werk', 'sport', 'thuis', 'prive'] as const;
 export type Category = (typeof CATEGORIES)[number];
