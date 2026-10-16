@@ -1,10 +1,28 @@
 import type { DashyState } from './core';
+import type { PlanItem } from './dashboard/plan';
 
-export interface RemoteState { state: DashyState; line: string; source: 'driver' | 'claude' | 'fallback'; nextWakeAt: number | null; rev: number; /** which driver rule decided, when the server says */ rule?: string }
+export interface RemoteState { state: DashyState; line: string; source: 'driver' | 'claude' | 'fallback'; nextWakeAt: number | null; rev: number; /** which driver rule decided, when the server says */ rule?: string; /** the plan (titles), when the server keeps it */ items: PlanItem[]; focusId: string | null }
 export interface StateClientOptions { url: string; token: string; timeoutMs?: number; fetch?: typeof fetch }
 
 const STATES: readonly string[] = ['idle', 'received', 'working', 'thinking', 'waiting', 'blocked', 'done', 'happy', 'sad', 'angry', 'strict', 'dancing', 'sleepy'];
-export const CALM: RemoteState = Object.freeze({ state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0 }) as RemoteState;
+export const CALM: RemoteState = Object.freeze({ state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null }) as RemoteState;
+
+const ID = /^[A-Za-z0-9_-]{1,64}$/;
+const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+function parseItem(x: unknown): PlanItem {
+  if (typeof x !== 'object' || x === null) throw new Error('bad item');
+  const o = x as Record<string, unknown>;
+  if (typeof o.id !== 'string' || !ID.test(o.id)) throw new Error('bad item id');
+  if (o.kind !== 'task' && o.kind !== 'event') throw new Error('bad item kind');
+  if (typeof o.title !== 'string' || o.title.length === 0 || o.title.length > 120) throw new Error('bad item title');
+  if (o.at !== null && !num(o.at)) throw new Error('bad item time');
+  const item: PlanItem = { id: o.id, kind: o.kind, title: o.title, at: o.at as number | null };
+  if (o.endsAt !== undefined && o.endsAt !== null) { if (!num(o.endsAt)) throw new Error('bad item end'); item.endsAt = o.endsAt; }
+  if (o.done !== undefined) { if (typeof o.done !== 'boolean') throw new Error('bad item done'); item.done = o.done; }
+  if (o.doneAt !== undefined) { if (!num(o.doneAt)) throw new Error('bad item doneAt'); item.doneAt = o.doneAt; }
+  if (o.note !== undefined) { if (typeof o.note !== 'string' || o.note.length > 200) throw new Error('bad item note'); item.note = o.note; }
+  return item;
+}
 
 /** Strict check of the state body; throws on anything unexpected. Unknown extra keys are ignored (the server may add some). */
 export function parseRemoteState(raw: unknown): RemoteState {
@@ -16,7 +34,10 @@ export function parseRemoteState(raw: unknown): RemoteState {
   if (o.source !== 'driver' && o.source !== 'claude' && o.source !== 'fallback') throw new Error('bad source');
   const wake = o.nextWakeAt;
   if (wake !== null && (typeof wake !== 'number' || !Number.isFinite(wake))) throw new Error('bad wake');
-  return { state: o.state as DashyState, line: o.line, source: o.source, nextWakeAt: wake as number | null, rev: typeof o.rev === 'number' ? o.rev : 0, ...(typeof o.rule === 'string' && o.rule.length < 30 ? { rule: o.rule } : {}) };
+  if (o.items !== undefined && (!Array.isArray(o.items) || o.items.length > 400)) throw new Error('bad items');
+  const items = ((o.items as unknown[] | undefined) ?? []).map(parseItem);
+  if (o.focusId !== undefined && o.focusId !== null && (typeof o.focusId !== 'string' || !ID.test(o.focusId))) throw new Error('bad focusId');
+  return { items, focusId: (o.focusId as string | null | undefined) ?? null, state: o.state as DashyState, line: o.line, source: o.source, nextWakeAt: wake as number | null, rev: typeof o.rev === 'number' ? o.rev : 0, ...(typeof o.rule === 'string' && o.rule.length < 30 ? { rule: o.rule } : {}) };
 }
 
 /** Never throws, never hangs: any error, timeout, bad status or invalid body gives the calm fallback (idle, no text). */
@@ -33,4 +54,16 @@ export async function fetchDashyState(o: StateClientOptions): Promise<RemoteStat
     request.catch(() => {});
     return await Promise.race([request, timeout]);
   } catch { return { ...CALM }; } finally { clearTimeout(timer); }
+}
+
+export type ActionKind = 'done' | 'undo';
+/** Check off (or undo) a task. Resolves to the fresh state, or null when it did not work (the screen then just keeps what it has). */
+export async function sendAction(o: { url: string; token: string; action: ActionKind; id: string; timeoutMs?: number; fetch?: typeof fetch }): Promise<RemoteState | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), o.timeoutMs ?? 8000);
+  try {
+    const res = await (o.fetch ?? fetch)(o.url, { method: 'POST', headers: { authorization: `Bearer ${o.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: o.action, id: o.id }), signal: ctl.signal, cache: 'no-store' });
+    if (!res.ok) return null;
+    return parseRemoteState(await res.text());
+  } catch { return null; } finally { clearTimeout(timer); }
 }

@@ -239,3 +239,37 @@ test('Dashy looks towards the block that needs attention: direction, distance, a
   assert.equal(aimAt({ ...me, width: 0 }, me, root), null); assert.equal(aimAt(me, me, { ...root, width: 0 }), null);
   assert.equal(aimAt(me, { left: NaN, top: 0, width: 1, height: 1 }, root), null);
 });
+
+// ---------- "Nu": the one thing ----------
+import { nowTask } from '../src/dashboard/plan';
+test('Nu: the order of the rules', () => {
+  const day = (h: number, m = 0) => new Date(2026, 9, 16, h, m).getTime(); // a local clock time on the test day
+  const N = day(12, 0);
+  const T = (id: string, at: number | null, o: Partial<PlanItem> = {}) => task(id, at, o);
+  assert.equal(nowTask([], N), null);
+  assert.equal(nowTask([T('d', N + MIN, { done: true })], N), null, 'only done tasks: nothing to do');
+  // 1. a deadline within 15 minutes beats everything, even a chosen task and an appointment
+  const all = [T('far', N + 5 * 60 * MIN), T('near', N + 10 * MIN), event('e', N + 5 * MIN), T('chosen', null)];
+  assert.deepEqual([nowTask(all, N, 'chosen')!.item.id, nowTask(all, N, 'chosen')!.why], ['near', 'deadline-near']);
+  assert.equal(nowTask([T('late', N - 10 * MIN)], N)!.why, 'deadline-near', 'still counted 15 minutes after it passed');
+  assert.equal(nowTask([T('late', N - 16 * MIN), T('b', null)], N)!.item.id, 'b', 'long overdue is no longer "now"; it is simply open');
+  // 2. what someone chose, while it is open
+  const rest = [T('far', N + 5 * 60 * MIN), event('e', N + 5 * MIN), T('chosen', null)];
+  assert.deepEqual([nowTask(rest, N, 'chosen')!.item.id, nowTask(rest, N, 'chosen')!.reason], ['chosen', 'Als eerste gekozen']);
+  assert.equal(nowTask([...rest.slice(0, 2), T('chosen', null, { done: true })], N, 'chosen')!.item.id, 'e', 'a chosen task that is done is ignored');
+  assert.equal(nowTask(rest, N, 'unknown')!.item.id, 'e', 'an unknown id is ignored');
+  // 3. appointment within 10 minutes, 4. deadline within the hour
+  assert.equal(nowTask([T('x', N + 40 * MIN), event('e', N + 9 * MIN)], N)!.why, 'appointment');
+  assert.equal(nowTask([T('x', N + 40 * MIN), event('e', N + 11 * MIN)], N)!.why, 'deadline-soon', 'an appointment in 11 minutes is not yet "now"');
+  assert.equal(nowTask([event('e', N - 2 * MIN)], N)!.why, 'appointment'); assert.equal(nowTask([event('e', N - 3 * MIN)], N), null);
+  // 5. earliest deadline today, 6. no time, 7. another day
+  assert.deepEqual([nowTask([T('b', day(16)), T('a', day(14))], N)!.item.id, nowTask([T('b', day(16)), T('a', day(14))], N)!.why], ['a', 'today']);
+  assert.equal(nowTask([T('tomorrow', day(9) + 24 * 60 * MIN), T('free', null)], N)!.item.id, 'free', 'a task without a time beats one for tomorrow');
+  const later = nowTask([T('tomorrow', day(9) + 24 * 60 * MIN)], N)!; assert.deepEqual([later.item.id, later.why], ['tomorrow', 'later']); assert.match(later.reason, /^Deadline \w+/);
+  // events alone (far away) are not "to do"
+  assert.equal(nowTask([event('e', N + 3 * 60 * MIN)], N), null);
+});
+test('Nu: pure and stable (same input, same answer; input untouched)', () => {
+  const items = Object.freeze([task('a', T0 + 50 * MIN), task('b', T0 + 20 * MIN), task('c', null)]);
+  assert.deepEqual(nowTask(items, T0), nowTask(items, T0)); assert.equal(nowTask(items, T0)!.item.id, 'b');
+});

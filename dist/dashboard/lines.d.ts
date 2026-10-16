@@ -9,6 +9,8 @@ export interface LineContext {
         at: string;
     };
     /** next appointment or task, for calm moments */
+    /** the one thing that is "Nu" on the screen */
+    nowTitle?: string;
     nextTitle?: string;
     nextIn?: string;
     /** an open task that is past its deadline for a while: still open, never blamed */

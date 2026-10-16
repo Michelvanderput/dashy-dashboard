@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LIMITS, MemoryStore, apply, emptyDoc, parseDoc, read, update, view, type Call, type Doc } from '../src/server/dashyStore';
+import { LIMITS, MemoryStore, apply, emptyDoc, nowOf, parseDoc, read, update, view, type Call, type Doc } from '../src/server/dashyStore';
 
 const MIN = 60_000, T0 = Date.parse('2026-10-16T12:00:00+02:00');
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -127,4 +127,56 @@ test('storage: update saves on success, not on error; corrupt or missing data gi
     assert.equal((await read(s, T0)).rev, 0);
   }
   assert.ok(parseDoc(JSON.stringify(emptyDoc(T0))), 'JSON text from storage is accepted');
+});
+
+const T = (d: Doc) => Object.values(d.items);
+test('titles are stored with the task; reopen brings a finished task back; done keeps it for the screen', () => {
+  let d = ok(emptyDoc(T0), { tool: 'task', action: 'added', id: 'offerte', title: '  Offerte\nsturen ', note: 'Klant wacht', due: iso(T0 + 50 * MIN) });
+  assert.deepEqual([T(d)[0].title, T(d)[0].note, T(d)[0].kind, T(d)[0].at], ['Offerte sturen', 'Klant wacht', 'task', T0 + 50 * MIN]);
+  d = ok(d, { tool: 'task', action: 'done', id: 'offerte' }, T0 + 1000);
+  assert.equal(d.items.offerte.done, true); assert.equal(d.items.offerte.doneAt, T0 + 1000);
+  d = ok(d, { tool: 'task', action: 'reopen', id: 'offerte' }, T0 + 2000);
+  assert.equal(d.items.offerte.done, false); assert.equal(d.items.offerte.doneAt, undefined);
+  assert.equal(d.driver.tasks.offerte, T0 + 50 * MIN, 'the driver watches the deadline again');
+  assert.equal(apply(d, { tool: 'task', action: 'reopen', id: 'offerte' }, T0).ok, false, 'only finished tasks can be reopened');
+  assert.equal(apply(d, { tool: 'task', action: 'reopen', id: 'nope' }, T0).ok, false);
+});
+
+test('appointments: stored with start and end, default 30 minutes, validated, removable', () => {
+  let d = ok(emptyDoc(T0), { tool: 'appointment', action: 'added', id: 'overleg', title: 'Overleg', start: iso(T0 + 60 * MIN) });
+  assert.deepEqual([T(d)[0].kind, T(d)[0].at, T(d)[0].endsAt], ['event', T0 + 60 * MIN, T0 + 90 * MIN]);
+  for (const c of [
+    { tool: 'appointment', action: 'added', id: 'x', start: iso(T0) }, { tool: 'appointment', action: 'added', id: 'x', title: 'X' },
+    { tool: 'appointment', action: 'added', id: 'x', title: 'X', start: iso(T0), end: iso(T0 - MIN) }, { tool: 'appointment', action: 'added', id: 'a b', title: 'X', start: iso(T0) },
+  ] as Call[]) assert.equal(apply(d, c, T0).ok, false, JSON.stringify(c));
+  d = ok(d, { tool: 'appointment', action: 'removed', id: 'overleg' });
+  assert.equal(T(d).length, 0);
+});
+
+test('focus: chosen task becomes "Nu" unless a deadline is closer; cleared with null; unknown id is refused', () => {
+  let d = ok(emptyDoc(T0), { tool: 'task', action: 'added', id: 'a', title: 'Offerte', due: iso(T0 + 5 * 60 * MIN) });
+  d = ok(d, { tool: 'task', action: 'added', id: 'b', title: 'Opruimen', due: null });
+  assert.equal(nowOf(d, T0 + 5000)?.item.id, 'a', 'a deadline today comes before a task without a time');
+  d = ok(d, { tool: 'task', action: 'done', id: 'a' }, T0 + 5000); assert.equal(nowOf(d, T0 + 9000)?.item.id, 'b');
+  d = ok(d, { tool: 'task', action: 'reopen', id: 'a' }, T0 + 9000);
+  d = ok(d, { tool: 'focus', id: 'a' }); assert.equal(nowOf(d, T0 + 5000)?.item.id, 'a');
+  assert.equal(apply(d, { tool: 'focus', id: 'zzz' }, T0).ok, false);
+  d = ok(d, { tool: 'focus', id: null }); assert.equal(d.focusId, null);
+});
+
+test('housekeeping: finished tasks go after 24 h, long-gone appointments after 12 h, and old documents without items still load', () => {
+  let d = ok(emptyDoc(T0), { tool: 'task', action: 'added', id: 'a', title: 'A', due: null });
+  d = ok(d, { tool: 'appointment', action: 'added', id: 'e', title: 'E', start: iso(T0 + MIN) });
+  d = ok(d, { tool: 'task', action: 'done', id: 'a' }, T0 + MIN);
+  const later = T0 + 25 * 60 * MIN;
+  d = ok(d, { tool: 'task', action: 'added', id: 'new', title: 'Nieuw', due: null }, later);
+  assert.deepEqual(Object.keys(d.items), ['new']);
+  const old = { rev: 3, driver: emptyDoc(T0).driver, mood: null };
+  const parsed = parseDoc(old); assert.ok(parsed); assert.deepEqual([parsed!.items, parsed!.focusId], [{}, null]);
+  assert.equal(parseDoc({ ...old, items: { a: { id: 'a', kind: 'bogus', title: 'x', at: null } } }), null, 'a broken item is not trusted');
+});
+
+test('title and note limits: cleaned, capped, no markup survives as layout', () => {
+  const d = ok(emptyDoc(T0), { tool: 'task', action: 'added', id: 'a', title: 'x'.repeat(200), note: 'y'.repeat(300), due: null });
+  assert.ok(d.items.a.title.length <= LIMITS.title); assert.ok(d.items.a.note!.length <= LIMITS.note);
 });

@@ -25,6 +25,8 @@ export interface DashboardProps {
     line?: string;
     music: DashboardMusic;
     onToggleDone?: (id: string, done: boolean) => void;
+    /** The task someone chose to do first (MCP or a tap). It becomes "Nu" unless a deadline is closer. */
+    focusTaskId?: string | null;
     /** Text for an empty planning. Default: "Een lege dag. Voeg iets kleins toe." */
     emptyText?: string;
     /** Dark and dimmed (for the night, a phone on the charger). */
@@ -46,4 +48,4 @@ export interface DashboardProps {
  * (a deadline, an appointment, Dashy asking for help, new music) the grid tracks grow so that block takes about half the
  * screen, animated by the browser itself; the content simply reflows. Tap a block's button to grow it yourself (Esc lets go).
  */
-export declare function Dashboard({ now, items, resolution, state, line, music, onToggleDone, emptyText, night, keepAwake, workday, onFocusChange, className, style }: DashboardProps): import("react").JSX.Element;
+export declare function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, emptyText, night, keepAwake, workday, onFocusChange, className, style }: DashboardProps): import("react").JSX.Element;

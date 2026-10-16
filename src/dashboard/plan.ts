@@ -1,7 +1,7 @@
 /** Planning data and the small helpers around it. Pure. */
 import { initialDriverState, reduce, type DriverState } from '../driver';
 
-export interface PlanItem { id: string; kind: 'task' | 'event'; title: string; /** start (event) or deadline (task), ms epoch */ at: number | null; endsAt?: number | null; done?: boolean; note?: string }
+export interface PlanItem { id: string; kind: 'task' | 'event'; title: string; /** start (event) or deadline (task), ms epoch */ at: number | null; endsAt?: number | null; done?: boolean; /** when it was finished, ms epoch (housekeeping) */ doneAt?: number; note?: string }
 /** `late` = open and more than 15 minutes past its deadline: it is simply still open (the driver stops nagging then too). */
 export type Urgency = 'near' | 'soon' | 'late' | 'normal';
 
@@ -94,4 +94,44 @@ export function reducer(m: Model, a: Action, now: number): Model {
     case 'music': return a.playing === (m.musicSince !== null) ? m : { ...m, musicSince: a.playing ? now : null, driver: a.playing ? reduce(m.driver, { type: 'activity' }, now) : m.driver };
     case 'reset': return initialModel(a.items, now);
   }
+}
+
+// ---------- "Nu": the one thing ----------
+export interface NowPick { item: PlanItem; /** short, neutral, e.g. "Deadline om 12:00" */ reason: string; why: 'deadline-near' | 'chosen' | 'appointment' | 'deadline-soon' | 'today' | 'later' | 'open' }
+
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+
+/**
+ * The one thing to do now. In this order, the first that applies:
+ * 1. a task whose deadline is within 15 minutes (or passed less than 15 minutes ago)
+ * 2. the task someone chose (`focusId`, set by Claude or by tapping), while it is open
+ * 3. an appointment that starts within 10 minutes (or started less than 2 minutes ago)
+ * 4. a task whose deadline is within the hour
+ * 5. the open task with the earliest deadline today
+ * 6. an open task without a time
+ * 7. the open task with the earliest deadline on another day
+ * Nothing open: null. Pure; ties go to the earliest deadline, then the order in the list.
+ */
+export function nowTask(items: readonly PlanItem[], now: number, focusId?: string | null): NowPick | null {
+  const open = items.filter(i => !i.done);
+  const tasks = open.filter(i => i.kind === 'task');
+  const byTime = (a: PlanItem, b: PlanItem) => (a.at ?? Infinity) - (b.at ?? Infinity);
+  const dl = (i: PlanItem) => `Deadline om ${clock(i.at!)}`;
+  const timed = tasks.filter(i => i.at !== null && i.at >= now - URGENT.nearMs).sort(byTime);
+  const near = timed.find(i => i.at! - now <= URGENT.nearMs);
+  if (near) return { item: near, reason: dl(near), why: 'deadline-near' };
+  const chosen = focusId ? open.find(i => i.id === focusId) : undefined;
+  if (chosen) return { item: chosen, reason: 'Als eerste gekozen', why: 'chosen' };
+  const appt = open.filter(i => i.kind === 'event' && i.at !== null && i.at - now <= 10 * 60_000 && i.at - now >= -2 * 60_000).sort(byTime)[0];
+  if (appt) return { item: appt, reason: `Afspraak om ${clock(appt.at!)}`, why: 'appointment' };
+  const soon = timed.find(i => i.at! - now <= URGENT.soonMs);
+  if (soon) return { item: soon, reason: dl(soon), why: 'deadline-soon' };
+  const today = timed.find(i => sameDay(i.at!, now));
+  if (today) return { item: today, reason: dl(today), why: 'today' };
+  const open0 = tasks.find(i => i.at === null);
+  if (open0) return { item: open0, reason: 'Zonder tijd', why: 'open' };
+  const later = timed[0] ?? tasks.filter(i => i.at !== null).sort(byTime)[0];
+  if (later && later.at! < now - URGENT.nearMs) return { item: later, reason: `Nog open, was ${clock(later.at!)}`, why: 'open' };
+  if (later) return { item: later, reason: `Deadline ${new Intl.DateTimeFormat('nl-NL', { weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false }).format(later.at!)}`, why: 'later' };
+  return null;
 }

@@ -9,4 +9,6 @@ export interface RemoteOptions extends StateClientOptions {
  * Polls the state endpoint and returns what Dashy should show. Asks sooner when the server says the answer changes
  * by itself at a known moment (nextWakeAt), and stops asking while the window is hidden.
  */
-export declare function useRemoteDashy(o: RemoteOptions): RemoteState;
+export declare function useRemoteDashy(o: RemoteOptions): RemoteState & {
+    apply: (s: RemoteState) => void;
+};

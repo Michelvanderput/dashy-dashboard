@@ -87,10 +87,14 @@ Claude roept jouw app aan, niet andersom: een remote MCP-server op Vercel (`api/
 
 | Tool | Doet |
 |---|---|
-| `dashy_task` | `added` (met optionele deadline), `done` (Dashy viert), `removed`, `due` (deadline wijzigen of wissen). Alleen een zelfgekozen id, nooit de titel. |
+| `dashy_task` | `added` (met korte `title`, optionele `due` en `note`), `done` (Dashy viert), `reopen`, `removed`, `due` (deadline wijzigen of wissen). Het resultaat zegt wat er nu "Nu" staat. |
+| `dashy_appointment` | `added` (id, titel, start, optioneel einde) of `removed`. Binnen 10 minuten voor de start wordt het "Nu". |
+| `dashy_focus` | kies welke taak als eerste moet (`id`), of `null` om te wissen. Een deadline binnen 15 minuten gaat altijd voor. |
 | `dashy_flag` | `waiting`, `blocked`, `break` (slaperig), `working` aan of uit |
 | `dashy_activity` | "er is iets gedaan": houdt Dashy uit `sad` |
 | `dashy_mood` | stemming + één zin (max 100 tekens), verloopt na 30 minuten, `clear: true` haalt weg |
+
+**Privacy:** titels en notities staan in jouw eigen Upstash-database (één JSON-document, `dashy:v1`) en op je scherm, nergens anders. Zet er geen geheimen in. Afgeronde taken verdwijnen na 24 uur, afspraken 12 uur na afloop.
 
 De prioriteiten van de driver blijven gelden: Claudes stemming verschijnt alleen als Dashy niets urgents heeft (geen deadline, blokkade, wachten, pauze of viering). Elk toolresultaat zegt wat Dashy nu toont en waarom, ook als de stemming wordt verborgen.
 
@@ -99,15 +103,9 @@ De prioriteiten van de driver blijven gelden: Claudes stemming verschijnt alleen
 claude mcp add --transport http dashy https://<jouw-app>.vercel.app/api/mcp --header "Authorization: Bearer <DASHY_MCP_TOKEN>"
 ```
 
-In de app:
+Het scherm koppelen (één keer per apparaat): open de app met `https://<jouw-app>.vercel.app/#key=<DASHY_STATE_TOKEN>&act=<DASHY_ACTION_TOKEN>`. Beide tokens blijven in `localStorage` van dat apparaat, de adresbalk wordt direct schoongemaakt en er staat niets geheims in de publieke bundel. Zonder `act` kan het scherm taken laten zien maar niet afvinken. Het blok **Nu** toont dan het ene ding dat nu aan de beurt is, met een knop **Klaar** (via `/api/dashy-action`).
 
-```tsx
-import { Dashy, useRemoteDashy } from 'dashy-avatar/react';
-const { state, line } = useRemoteDashy({ url: '/api/dashy-state', token: STATE_TOKEN });
-<Dashy state={state} />
-```
-
-- **Twee geheimen:** `DASHY_MCP_TOKEN` (Claude, schrijven) en `DASHY_STATE_TOKEN` (app, alleen lezen). Het ene werkt niet op het andere eindpunt. Het token kan ook als `?key=` in de URL, voor connectors zonder headers. URL's komen in logs, dus gebruik de header waar het kan.
+- **Drie geheimen:** `DASHY_MCP_TOKEN` (Claude, schrijven), `DASHY_STATE_TOKEN` (scherm, alleen lezen) en `DASHY_ACTION_TOKEN` (scherm, alleen taken afvinken of terugzetten). Elk werkt alleen op het eigen eindpunt. Het MCP-token kan ook als `?key=` in de URL, voor connectors zonder headers. URL's komen in logs, dus gebruik de header waar het kan.
 - **Zonder Redis of token** doet niets iets: de eindpunten geven 503 en een rustige Dashy.
 - **Twee schrijfacties binnen enkele milliseconden** kunnen elkaar overschrijven (laatste wint). Voor één persoon met één Claude is dat acceptabel.
 
@@ -152,7 +150,7 @@ Een rustig bento-scherm met vijf blokken: **Dashy**, **Straks**, **Planning**, *
 - **Staand en liggend** (telefoon aan de lader, tablet, desktop) hebben elk hun eigen indeling met dezelfde regels.
 - **Dashy leeft op de pagina:** hij heeft geen kaart achter zich. Zijn witte lichaam is het blok, een vierkantje met lucht erboven en ernaast en een vloer eronder. Het lijf ademt, stuitert, wordt platgedrukt en kantelt zoals `core.ts` dat berekent, en de schaduw op de vloer krimpt als hij omhoog gaat. Hij kijkt naar het blok dat aandacht nodig heeft. Een tik op zijn lijf laat hem schrikken, een tik ernaast laat zijn blok groeien. Het lichaam blijft **gegarandeerd binnen zijn eigen open ruimte** (dat is rekenkundig bewezen en in een echte browser gemeten), dus hij komt nooit over of achter een ander blok.
 - **Stijl:** vlak en kaal. Geen schaduwen, randen of kopjes: een blok legt zichzelf uit en het hele blok is aanraakbaar (de knop voor toetsenbord en schermlezer verschijnt bij focus). Aandacht is een klein accentpuntje en het groeien zelf. Lettertype **Geist** (zelf gehost via `@fontsource-variable/geist`, dus geen verzoek aan Google), zeer lichte cijfers met strakke spatiëring, warme steengrijze tinten voor licht, grafiet voor donker, één warm accent (vermiljoen) voor urgentie en één saliegroen voor klaar.
-- **Demo:** rechtsonder staat een knop "Demo" om elke situatie meteen te proberen. Met `VITE_SPOTIFY_CLIENT_ID` (zie `.env.example`) gebruikt het blok echte Spotify; met `VITE_DASHY_STATE_URL` en `VITE_DASHY_STATE_TOKEN` stuurt Claude via de MCP Dashy aan, en verdwijnt het demo-paneel.
+- **Demo:** rechtsonder staat een knop "Demo" om elke situatie meteen te proberen. Met `VITE_SPOTIFY_CLIENT_ID` (zie `.env.example`) gebruikt het blok echte Spotify; na het koppelen via de link (zie MCP) stuurt Claude Dashy en de lijsten aan en verdwijnt het demo-paneel.
 
 ## Andere platforms
 

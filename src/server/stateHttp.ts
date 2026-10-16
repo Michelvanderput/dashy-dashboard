@@ -1,5 +1,6 @@
 import { authorized, fingerprint, tokenFrom } from './auth';
-import { read, view, type Store } from './dashyStore';
+import type { PlanItem } from '../dashboard/plan';
+import { planOf, read, view, type Doc, type Store } from './dashyStore';
 
 export interface StateHttpDeps {
   store: Store | null;
@@ -10,9 +11,14 @@ export interface StateHttpDeps {
   log?: (msg: string) => void;
 }
 
-export interface StateBody { state: string; line: string; source: 'driver' | 'claude' | 'fallback'; rule: string; nextWakeAt: number | null; rev: number; at: number }
-const calm = (at: number): StateBody => ({ state: 'idle', line: '', source: 'fallback', rule: 'idle', nextWakeAt: null, rev: 0, at });
-const reply = (status: number, b: StateBody, reason?: string) =>
+export interface StateBody { state: string; line: string; source: 'driver' | 'claude' | 'fallback'; rule: string; nextWakeAt: number | null; rev: number; at: number; items: PlanItem[]; focusId: string | null }
+const calm = (at: number): StateBody => ({ state: 'idle', line: '', source: 'fallback', rule: 'idle', nextWakeAt: null, rev: 0, at, items: [], focusId: null });
+/** What the screen needs from the document: the state to show, and the plan. */
+export function buildStateBody(doc: Doc, now: number): StateBody {
+  const v = view(doc, now);
+  return { state: v.state, line: v.line, source: v.source, rule: v.rule, nextWakeAt: v.nextWakeAt, rev: v.rev, at: now, items: planOf(doc), focusId: doc.focusId };
+}
+export const reply = (status: number, b: StateBody, reason?: string) =>
   new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...(reason ? { 'x-dashy-reason': reason } : {}) } });
 
 /** What the app polls: the state Dashy should show right now. Every answer, also an error, is a valid state body. */
@@ -26,8 +32,7 @@ export async function handleStateRequest(req: Request, deps: StateHttpDeps): Pro
   try { allowed = await deps.allow(`state:${fingerprint(tokenFrom(req))}`); } catch (e) { log(`rate limiter failed: ${String(e)}`); }
   if (!allowed) return reply(429, calm(now), 'rate-limited');
   try {
-    const v = view(await read(deps.store, now), now);
-    return reply(200, { state: v.state, line: v.line, source: v.source, rule: v.rule, nextWakeAt: v.nextWakeAt, rev: v.rev, at: now });
+    return reply(200, buildStateBody(await read(deps.store, now), now));
   } catch (e) {
     log(`state read failed: ${String(e)}`);
     return reply(200, calm(now), 'fallback');

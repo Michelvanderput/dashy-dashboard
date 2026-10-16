@@ -6,7 +6,8 @@ export interface PlanItem {
     title: string; /** start (event) or deadline (task), ms epoch */
     at: number | null;
     endsAt?: number | null;
-    done?: boolean;
+    done?: boolean; /** when it was finished, ms epoch (housekeeping) */
+    doneAt?: number;
     note?: string;
 }
 /** `late` = open and more than 15 minutes past its deadline: it is simply still open (the driver stops nagging then too). */
@@ -59,3 +60,20 @@ export type Action = {
 };
 export declare function initialModel(items: PlanItem[], now: number): Model;
 export declare function reducer(m: Model, a: Action, now: number): Model;
+export interface NowPick {
+    item: PlanItem; /** short, neutral, e.g. "Deadline om 12:00" */
+    reason: string;
+    why: 'deadline-near' | 'chosen' | 'appointment' | 'deadline-soon' | 'today' | 'later' | 'open';
+}
+/**
+ * The one thing to do now. In this order, the first that applies:
+ * 1. a task whose deadline is within 15 minutes (or passed less than 15 minutes ago)
+ * 2. the task someone chose (`focusId`, set by Claude or by tapping), while it is open
+ * 3. an appointment that starts within 10 minutes (or started less than 2 minutes ago)
+ * 4. a task whose deadline is within the hour
+ * 5. the open task with the earliest deadline today
+ * 6. an open task without a time
+ * 7. the open task with the earliest deadline on another day
+ * Nothing open: null. Pure; ties go to the earliest deadline, then the order in the list.
+ */
+export declare function nowTask(items: readonly PlanItem[], now: number, focusId?: string | null): NowPick | null;

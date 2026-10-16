@@ -42,11 +42,17 @@ export const CSS = `
 .db-big{margin:0;font-size:clamp(2.4rem,19cqmin,7rem);font-weight:200;letter-spacing:-.05em;line-height:.95;font-variant-numeric:tabular-nums}
 .db-big small{font-size:.3em;font-weight:400;letter-spacing:0;color:var(--muted);margin-left:.3em}
 .db-what{margin:.5em 0 0;font-size:clamp(1em,4.2cqmin,1.55em);font-weight:500;letter-spacing:-.02em;line-height:1.2;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
-.db-when{margin:0;color:var(--muted);font-size:.95em}
+.db-when{margin:.3em 0 0;color:var(--muted);font-size:.95em}
+.db-note-now{margin:.4em 0 0;color:var(--muted);font-size:.9em;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.db-done{align-self:flex-start;margin-top:.9em;min-height:44px;min-width:44px;padding:.55em 1.4em;border:1px solid var(--ink);border-radius:999px;background:transparent;color:var(--ink);font:inherit;font-weight:500;cursor:pointer;transition:background .3s,color .3s}
+.db-done:hover{background:var(--ink);color:var(--card)}
+.db-done:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.db-after{margin:auto 0 0;padding-top:.8em;color:var(--muted);font-size:.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .db-empty{color:var(--muted);font-size:clamp(1em,4.2cqmin,1.4em);margin:auto 0}
 .db-more{margin:1em 0 0;padding:0;list-style:none;color:var(--muted);font-size:.9em;max-height:0;opacity:0;overflow:hidden;transition:opacity .5s var(--ease) .15s,max-height .6s var(--ease)}
 .db-block[data-focus="true"] .db-more{max-height:12em;opacity:1}
-@container (max-height:150px){.db-when{display:none}.db-big{font-size:2rem}}
+@container (max-height:210px){.db-after,.db-note-now{display:none}}
+@container (max-height:150px){.db-when{display:none}.db-done{margin-top:.5em}.db-big{font-size:2rem}}
 @container (max-height:95px){.db-what{display:none}.db-big{font-size:1.7rem}}
 
 /* Planning */

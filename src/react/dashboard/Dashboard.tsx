@@ -3,7 +3,7 @@ import { chooseAttention } from '../../dashboard/attention';
 import { aimAt } from '../../dashboard/aim';
 import { BLOCKS, tracksFor, type BlockId } from '../../dashboard/layout';
 import { dashyLine } from '../../dashboard/lines';
-import { clock, countdown, nextAppointmentAt, nextUp, planOrder, pressingTask, urgency, type PlanItem } from '../../dashboard/plan';
+import { clock, countdown, nextAppointmentAt, nextUp, nowTask, planOrder, pressingTask, urgency, type PlanItem } from '../../dashboard/plan';
 import type { DashyState } from '../../core';
 import type { Resolution } from '../../driver';
 import { musicState, type NowPlaying } from '../../spotify/model';
@@ -26,6 +26,8 @@ export interface DashboardProps {
   line?: string;
   music: DashboardMusic;
   onToggleDone?: (id: string, done: boolean) => void;
+  /** The task someone chose to do first (MCP or a tap). It becomes "Nu" unless a deadline is closer. */
+  focusTaskId?: string | null;
   /** Text for an empty planning. Default: "Een lege dag. Voeg iets kleins toe." */
   emptyText?: string;
   /** Dark and dimmed (for the night, a phone on the charger). */
@@ -40,7 +42,7 @@ export interface DashboardProps {
   style?: CSSProperties;
 }
 
-const TITLES: Record<BlockId, string> = { dashy: 'Dashy', now: 'Straks', plan: 'Planning', music: 'Muziek', clock: 'Vandaag' };
+const TITLES: Record<BlockId, string> = { dashy: 'Dashy', now: 'Nu', plan: 'Planning', music: 'Muziek', clock: 'Vandaag' };
 const dateFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
 
 const Chevrons = () => (
@@ -95,7 +97,7 @@ function Block({ id, focus, attn, onToggle, children }: { id: BlockId; focus: bo
  * (a deadline, an appointment, Dashy asking for help, new music) the grid tracks grow so that block takes about half the
  * screen, animated by the browser itself; the content simply reflows. Tap a block's button to grow it yourself (Esc lets go).
  */
-export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
+export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
   const root = useRef<HTMLElement>(null);
   const orientation = useOrientation(root);
 
@@ -108,7 +110,9 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   const plan = useMemo(() => planOrder(items, now), [items, now]);
   const next = nextUp(items, now);
   const late = plan.find(i => i.kind === 'task' && !i.done && urgency(i, now) === 'late') ?? null; // open, long past its deadline: named, never blamed
-  const stale = next ? null : late; // Straks shows it only when nothing else is coming up
+  const pick = nowTask(items, now, focusTaskId);
+  const after = nextUp(items.filter(i => i.id !== pick?.item.id), now);
+  const stale = late;
   const candidate = chooseAttention({ now, resolution, nextEventAt: nextAppointmentAt(items, now), musicSince });
   const { focus, toggle, release } = useFocus(candidate, now);
 
@@ -125,7 +129,7 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   const press = pressingTask(items, now);
   const dashyText = line ?? dashyLine(resolution, {
     task: press ? { title: press.title, in: countdown(press.at! - now), overdue: press.at! < now - 60_000, at: clock(press.at!) } : undefined,
-    nextTitle: next?.item.title, nextIn, stale: late?.title, music: playing ? np!.title : undefined,
+    nowTitle: pick?.item.title, nextTitle: next?.item.title, nextIn, stale: late?.title, music: playing ? np!.title : undefined,
   });
 
   const d = new Date(now), minutes = d.getHours() * 60 + d.getMinutes();
@@ -151,16 +155,14 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
       ) : (
         <Block key={id} id={id} focus={focus.block === id} attn={attn(id)} onToggle={toggle}>
           {id === 'now' && (
-            <div className="db-now">
-              {next && big ? (<>
-                <p className="db-big">{big.n}{big.u && <small>{big.u}</small>}</p>
-                <p className="db-what">{next.item.title}</p>
-                <p className="db-when">{next.item.kind === 'event' ? 'Afspraak' : 'Deadline'} om {clock(next.at)}</p>
-              </>) : stale ? (<>
-                <p className="db-what">{stale.title}</p>
-                <p className="db-when">Nog open{stale.at !== null ? `, was ${clock(stale.at)}` : ''}</p>
-              </>) : <p className="db-empty">Niets gepland.</p>}
-              <ul className="db-more">{plan.filter(i => !i.done && i.at !== null && i.id !== next?.item.id).slice(0, 3).map(i => <li key={i.id}>{clock(i.at!)} · {i.title}</li>)}</ul>
+            <div className="db-now" data-kind={pick?.item.kind ?? 'none'}>
+              {pick ? (<>
+                <p className="db-what">{pick.item.title}</p>
+                <p className="db-when">{pick.reason}{pick.item.at !== null && pick.item.at >= now && pick.item.at - now <= 2 * 3600_000 ? ` · over ${countdown(pick.item.at - now)}` : ''}</p>
+                {pick.item.note && <p className="db-note-now">{pick.item.note}</p>}
+                {pick.item.kind === 'task' && onToggleDone && <button type="button" className="db-done" onClick={() => onToggleDone(pick.item.id, true)} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
+                {after && <p className="db-after">Straks: {clock(after.at)} · {after.item.title}</p>}
+              </>) : items.some(i => i.kind === 'task' && i.done) ? <p className="db-empty">Alles gedaan.</p> : <p className="db-empty">Niets te doen.</p>}
               <p className="db-why">{focus.block === 'now' ? focus.reason : ''}</p>
             </div>
           )}

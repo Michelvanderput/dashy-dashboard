@@ -23,7 +23,7 @@ const dashyLabel = (c: HTMLElement) => block(c, 'dashy').querySelector('svg[role
 describe('<Dashboard />', () => {
   it('shows five labelled blocks and starts calm: nothing grown, nothing announced', () => {
     const { container } = render(<Dashboard {...base()} />);
-    for (const t of ['Dashy', 'Straks', 'Planning', 'Muziek', 'Vandaag']) expect(screen.getByRole('heading', { name: t })).toBeTruthy();
+    for (const t of ['Dashy', 'Nu', 'Planning', 'Muziek', 'Vandaag']) expect(screen.getByRole('heading', { name: t })).toBeTruthy();
     expect(container.querySelectorAll('section.db-block')).toHaveLength(5);
     expect(root(container).dataset.focus).toBe('none');
     expect(container.querySelector('[role="status"].db-sr')!.textContent).toBe('');
@@ -259,5 +259,32 @@ describe('a phone on the charger, and a real day', () => {
     const { container } = render(<Dashboard {...base({ items: items2, resolution: res('quiet') })} />);
     expect(container.querySelector('.db-line')!.textContent).toBe('Bellen staat nog open. Zullen we een nieuw moment kiezen?');
     expect(container.querySelector('.db-now')!.textContent).toContain('Rapport'); // Straks still shows what comes next
+  });
+
+  it('"Nu" is one thing: the title, why, and a Klaar button that checks it off', () => {
+    const onToggleDone = vi.fn();
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Offerte sturen', at: T0 + 30 * MIN }, { id: 'b', kind: 'event', title: 'Overleg', at: T0 + 90 * MIN, endsAt: T0 + 120 * MIN }];
+    const { container } = render(<Dashboard {...base({ items: items2, onToggleDone })} />);
+    const now = container.querySelector('.db-now') as HTMLElement;
+    expect(now.querySelector('.db-what')!.textContent).toBe('Offerte sturen');
+    expect(now.querySelector('.db-when')!.textContent).toMatch(/^Deadline om .* · over 30 min$/);
+    expect(now.querySelector('.db-after')!.textContent).toMatch(/^Straks: .* · Overleg$/);
+    fireEvent.click(within(now).getByRole('button', { name: 'Offerte sturen: markeer als klaar' }));
+    expect(onToggleDone).toHaveBeenCalledWith('a', true);
+  });
+
+  it('"Nu" follows the chosen task (focusTaskId), without a Klaar button when nothing can be checked off', () => {
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Offerte sturen', at: T0 + 5 * 60 * MIN }, { id: 'b', kind: 'task', title: 'Opruimen', at: null }];
+    const { container } = render(<Dashboard {...base({ items: items2, focusTaskId: 'b' })} />);
+    expect(container.querySelector('.db-now .db-what')!.textContent).toBe('Opruimen');
+    expect(container.querySelector('.db-now .db-done')).toBeNull();
+    expect(container.querySelector('.db-line')!.textContent).toBe('Nu: Opruimen.');
+  });
+
+  it('"Nu" says honestly when there is nothing: nothing to do, or everything done', () => {
+    const a = render(<Dashboard {...base({ items: [] })} />);
+    expect(a.container.querySelector('.db-now')!.textContent).toContain('Niets te doen.'); cleanup();
+    const b = render(<Dashboard {...base({ items: [{ id: 'a', kind: 'task', title: 'X', at: null, done: true }] })} />);
+    expect(b.container.querySelector('.db-now')!.textContent).toContain('Alles gedaan.');
   });
 });

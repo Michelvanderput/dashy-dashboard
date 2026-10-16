@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CALM, fetchDashyState, type RemoteState, type StateClientOptions } from '../state-client';
 
 export interface RemoteOptions extends StateClientOptions {
@@ -12,8 +12,9 @@ export interface RemoteOptions extends StateClientOptions {
  * Polls the state endpoint and returns what Dashy should show. Asks sooner when the server says the answer changes
  * by itself at a known moment (nextWakeAt), and stops asking while the window is hidden.
  */
-export function useRemoteDashy(o: RemoteOptions): RemoteState {
+export function useRemoteDashy(o: RemoteOptions): RemoteState & { /** show a state we already have (e.g. the answer to an action) */ apply: (s: RemoteState) => void } {
   const [s, setS] = useState<RemoteState>({ ...CALM });
+  const apply = useCallback((n: RemoteState) => setS(n), []);
   const { url, token, intervalMs = 15_000, timeoutMs, fetch: f, enabled = true } = o;
   useEffect(() => {
     if (!enabled) { setS({ ...CALM }); return; }
@@ -23,7 +24,7 @@ export function useRemoteDashy(o: RemoteOptions): RemoteState {
       if (typeof document !== 'undefined' && document.hidden) { timer = setTimeout(tick, intervalMs); return; }
       const next = await fetchDashyState({ url, token, timeoutMs, fetch: f });
       if (stop) return;
-      setS(prev => (prev.state === next.state && prev.line === next.line && prev.source === next.source ? prev : next));
+      setS(prev => (prev.rev === next.rev && prev.state === next.state && prev.line === next.line && prev.source === next.source ? prev : next));
       const until = next.nextWakeAt === null ? intervalMs : Math.max(1000, Math.min(intervalMs, next.nextWakeAt - Date.now() + 50));
       timer = setTimeout(tick, until);
     };
@@ -32,5 +33,5 @@ export function useRemoteDashy(o: RemoteOptions): RemoteState {
     document.addEventListener('visibilitychange', onVisible);
     return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [url, token, intervalMs, timeoutMs, f, enabled]);
-  return s;
+  return { ...s, apply };
 }

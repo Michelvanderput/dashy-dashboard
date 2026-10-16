@@ -4,6 +4,7 @@
  */
 import { type AllowedState } from '../advice';
 import type { DashyState } from '../core';
+import { type NowPick, type PlanItem } from '../dashboard/plan';
 import { type DriverState, type RuleName } from '../driver';
 export interface Mood {
     state: AllowedState;
@@ -14,10 +15,21 @@ export interface Doc {
     rev: number;
     driver: DriverState;
     mood: Mood | null;
+    /** The plan: tasks and appointments with their titles (kept in your own database; see the README for the privacy trade-off). */
+    items: Record<string, PlanItem>;
+    /** The task someone chose to do first (by Claude or by tapping), or null. */
+    focusId: string | null;
 }
 export declare const emptyDoc: (now: number) => Doc;
+/** The plan as a list, for the screen. */
+export declare const planOf: (doc: Doc) => PlanItem[];
+/** The one thing to do now, as the screen will show it (so Claude can see it too). */
+export declare const nowOf: (doc: Doc, now: number) => NowPick | null;
 export declare const LIMITS: {
     readonly openTasks: 200;
+    readonly items: 300;
+    readonly title: 80;
+    readonly note: 100;
     readonly moodMinutesDefault: 30;
     readonly moodMinutesMax: 240;
     readonly idPattern: RegExp;
@@ -35,9 +47,22 @@ export interface View {
 export declare function view(doc: Doc, now: number): View;
 export type Call = {
     tool: 'task';
-    action: 'added' | 'done' | 'removed' | 'due';
+    action: 'added' | 'done' | 'removed' | 'due' | 'reopen';
     id: string;
     due?: string | null;
+    title?: string;
+    note?: string;
+} | {
+    tool: 'appointment';
+    action: 'added' | 'removed';
+    id: string;
+    title?: string;
+    start?: string;
+    end?: string | null;
+    note?: string;
+} | {
+    tool: 'focus';
+    id: string | null;
 } | {
     tool: 'flag';
     flag: 'waiting' | 'blocked' | 'break' | 'working';
