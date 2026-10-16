@@ -7,12 +7,19 @@ export type Status = 'idle' | 'received' | 'working' | 'thinking' | 'waiting' | 
 export type Mood = 'happy' | 'sad' | 'angry' | 'strict' | 'dancing' | 'sleepy';
 export type DashyState = Status | Mood;
 export type Shape = 'square' | 'circle';
+export type { Look, BlinkConfig } from './timeline';
 
 export interface DashyOptions {
   /** Seed for the (deterministic) randomness: blink timing, glances. */
   seed?: number;
   /** Eye height multiplier. Default 55/66 = golden ratio with 34 wide eyes (34 x 55). Use 1 for 34 x 66. */
   eyeScale?: number;
+  /** Ambient life (micro-saccades in the eyes, slow drift in the body). false/0 = off (default here, so the recorded reference stays exact), true = 1, or a strength. */
+  ambient?: boolean | number;
+  /** Head turn: the eye on the far side narrows when he looks sideways, up/down squashes the eyes. false/0 = off (default), true = 1, or a strength. */
+  perspective?: boolean | number;
+  /** Blink timing. Default: every 2.0 to 5.2 s, about 175 ms long. */
+  blink?: BlinkConfig;
 }
 export interface EyeGeometry {
   x: number; y: number; tilt: number; ew: number; eh: number;
@@ -42,9 +49,18 @@ export interface Dashy {
   poke(now: number): void;
   /** nx, ny in -1..1 relative to the centre of the avatar */
   pointer(nx: number, ny: number, now: number): void;
+  /** Override the eyes of the current state (a custom expression). null = back to the state's own look. `spring` sets how fast the eyes get there. */
+  setLook(look: Look | null, spring?: { k: number; d: number }): void;
+  setAmbient(strength: boolean | number): void;
+  setPerspective(strength: boolean | number): void;
+  setBlink(cfg: BlinkConfig | null): void;
   step(now: number): Geometry;
 }
 
+import type { BlinkConfig, Look } from './timeline';
+import { AMBIENT_WEIGHTS, ambientAt } from './ambient';
+import { eyePerspective } from './perspective';
+const level = (v: boolean | number | undefined) => v === true ? 1 : !v ? 0 : clamp(v, 0, 2);
 class Sp{x:number;v=0;t:number;k:number;d:number;constructor(x:number,k:number,d:number){this.x=x;this.t=x;this.k=k;this.d=d}
  s(dt:number){const a=(this.t-this.x)*this.k-this.v*this.d;this.v+=a*dt;this.x+=this.v*dt}}
 function clamp(v:number,a:number,b:number){return Math.max(a,Math.min(b,v))}
@@ -78,7 +94,7 @@ export function createDashy(options: DashyOptions = {}): Dashy {
  var st:any={cur:'idle',shape:'square',modeT:0,last:null,acc:0,
   nextHop:2500,nextStomp:2000,nextBlink:1800,nextWander:0,nextYawn:5000,nextNo:4500,nextCut:5000,nextScan:0,nextPing:3000,nextBurst:2000,nextMicro:0,
   blinkStart:-1e9,blinkLen:180,pokeUntil:0,yawnUntil:0,cutUntil:0,cutDir:1,noStart:-1e9,pingUntil:0,burstUntil:0,noticeUntil:0,
-  ehK:options.eyeScale ?? 55/66,lastPtr:-1e9,ptx:0,pty:0,ptxF:0,ptyF:0,gtx:0,gty:0,msx:0,msy:0,pokes:[],revertAt:0,revertTo:null};
+  ehK:options.eyeScale ?? 55/66,look:null as Look|null,amb:level(options.ambient),persp:level(options.perspective),spring:null as {k:number;d:number}|null,blinkCfg:(options.blink??null) as BlinkConfig|null,aw:null as {eye:number;body:number}|null,lastPtr:-1e9,ptx:0,pty:0,ptxF:0,ptyF:0,gtx:0,gty:0,msx:0,msy:0,pokes:[],revertAt:0,revertTo:null};
  var S=1.01,H=1/120;
  function setMode(k:string,now:number,quiet?:boolean){
   st.cur=k;st.modeT=now;st.noStart=-1e9;st.revertAt=0;
@@ -110,6 +126,7 @@ export function createDashy(options: DashyOptions = {}): Dashy {
   if(cur==='received'&&now-st.modeT>650){setMode('working',now,true);cur='working'}
   if(cur==='done'&&now-st.modeT>3600){setMode('idle',now,true);cur='idle'}
   var m=M[cur],T:Record<string,number>={};KEYS.forEach(function(n:string){T[n]=m[n]});T.sep=SEP+m.sd;
+  if(st.look){var lk:any=st.look;for(var lkk in lk){if(lk[lkk]===undefined)continue;if(lkk==='sd')T.sep=SEP+lk.sd;else T[lkk]=lk[lkk]}}
   var b=Math.sin(t*2.2)*.012,sx=1-b,sy=1+b,tx=0,ty=0,rot=0,amp=1,ptrRecent=now-st.lastPtr<2500;
   var k1=1-Math.exp(-dt*12);st.ptxF+=(st.ptx-st.ptxF)*k1;st.ptyF+=(st.pty-st.ptyF)*k1;
   if(cur==='idle'){ty=Math.sin(t*1.1)*-2;rot=Math.sin(t*.5)*1.5+st.gtx*3;amp=.85}
@@ -138,8 +155,8 @@ export function createDashy(options: DashyOptions = {}): Dashy {
    if(now>st.nextYawn){st.yawnUntil=now+1600;st.nextYawn=now+rnd(7000,10000)}
   }
   var sq=clamp(-P.ty.v*.0007,-.25,.25);sy+=sq;sx-=sq*.7;
-  var noBlink=(cur==='sleepy'||cur==='angry'),bf=cur==='working'?1.8:1;
-  if(now>st.nextBlink&&!noBlink){st.blinkStart=now;st.blinkLen=rnd(150,200);st.nextBlink=now+(R()<.18?330:rnd(2000,5200)*bf)}
+  var bc=st.blinkCfg,noBlink=(cur==='sleepy'||cur==='angry')||(bc!==null&&bc.enabled===false),bf=cur==='working'?1.8:1;
+  if(now>st.nextBlink&&!noBlink){st.blinkStart=now;st.blinkLen=bc&&bc.durationMs?rnd(bc.durationMs*.86,bc.durationMs*1.14):rnd(150,200);st.nextBlink=now+(R()<.18?330:rnd(bc&&bc.minMs?bc.minMs:2000,bc&&bc.maxMs?bc.maxMs:5200)*bf)}
   var bt=now-st.blinkStart,blink=0;
   if(bt>=0&&bt<st.blinkLen){var cl=st.blinkLen*.38;blink=bt<cl?ease(bt/cl):1-ease((bt-cl)/(st.blinkLen-cl))}
   if(now<st.noticeUntil){T.eh*=1.12;T.cover=0}
@@ -164,7 +181,7 @@ export function createDashy(options: DashyOptions = {}): Dashy {
   P.gx.t=(st.gtx+(calm?st.msx:0))*14*amp;P.gy.t=(st.gty+(calm?st.msy:0))*9*amp;
   P.fx.t=st.gtx*7*amp;P.fy.t=st.gty*4*amp;
   T.eh*=st.ehK;
-  KEYS.forEach(function(n:string){P[n].t=T[n]});
+  KEYS.forEach(function(n:string){P[n].t=T[n];if(st.spring){P[n].k=st.spring.k;P[n].d=st.spring.d}});
   P.sx.t=sx;P.sy.t=sy;P.rot.t=rot;P.tx.t=tx;P.ty.t=ty;
   var gxn=clamp(P.gx.x/14,-1,1),gyn=clamp(P.gy.x/9,-1,1);
   P.bx.t=P.tx.x*.6+gxn*5;P.by.t=P.ty.x*.6+gyn*2;
@@ -179,10 +196,17 @@ export function createDashy(options: DashyOptions = {}): Dashy {
    eyes:[] as EyeGeometry[]};
   for(var i=0;i<2;i++){
    var gs=i===0?-1:1,px=i===0?-1:1,sg=i===0?1:-1;
-   var side=1+gxn*gs*.06;
-   var eh=Math.max(2,P.eh.x*(1-.9*blink)*side),ew=EW*(1+gxn*gs*.03);
+   var side=1+gxn*gs*.06,pe=st.persp>0?eyePerspective(gxn,gyn,px*P.sep.x,st.persp):null;
+   var eh=Math.max(2,P.eh.x*(1-.9*blink)*(pe?pe.fh:side)),ew=EW*(pe?pe.fw:1+gxn*gs*.03);
    var cov=clamp(P.cover.x+(i===0?P.asym.x:-P.asym.x*.5),0,1);
    G.eyes.push({x:px*P.sep.x+P.gx.x+folx,y:P.gy.x*.6+fol-cov*eh*.22,tilt:P.tilt.x,ew:ew,eh:eh,cov:cov,lidA:sg*P.lidA.x,low:P.low.x,blink:blink});
+  }
+  if(st.amb>0){
+   var aw=AMBIENT_WEIGHTS[cur],w0=st.aw||(st.aw={eye:aw.eye,body:aw.body}),ka=1-Math.exp(-dt*3);
+   w0.eye+=(aw.eye-w0.eye)*ka;w0.body+=(aw.body-w0.body)*ka;
+   var am=ambientAt(now,w0,st.amb);
+   G.body.tx+=am.bodyX;G.body.ty+=am.bodyY;G.body.rot+=am.bodyRot;G.face.tx+=am.bodyX*.5;G.face.ty+=am.bodyY*.5;
+   for(var ai=0;ai<2;ai++){G.eyes[ai].x+=am.eyeX;G.eyes[ai].y+=am.eyeY}
   }
   return G;
  }
@@ -190,6 +214,8 @@ export function createDashy(options: DashyOptions = {}): Dashy {
   states:M as Record<string,{n:string}>,
   getState:()=>st.cur as DashyState,
   setState:(k:DashyState,now:number)=>{if(!(k in M))throw new Error('Unknown state: '+k);setMode(k,now)},
-  setShape:(s:Shape)=>setShape(s),setEyeScale:setRatio,poke,pointer,step
+  setShape:(s:Shape)=>setShape(s),setEyeScale:setRatio,poke,pointer,step,
+  setLook:(look:Look|null,spring?:{k:number;d:number})=>{st.look=look;st.spring=spring??null;if(!spring)KEYS.forEach(function(n:string){P[n].k=220;P[n].d=26})},
+  setAmbient:(v:boolean|number)=>{st.amb=level(v)},setPerspective:(v:boolean|number)=>{st.persp=level(v)},setBlink:(c:BlinkConfig|null)=>{st.blinkCfg=c}
  };
 }

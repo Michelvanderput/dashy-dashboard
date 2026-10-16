@@ -7,11 +7,18 @@ export type Status = 'idle' | 'received' | 'working' | 'thinking' | 'waiting' | 
 export type Mood = 'happy' | 'sad' | 'angry' | 'strict' | 'dancing' | 'sleepy';
 export type DashyState = Status | Mood;
 export type Shape = 'square' | 'circle';
+export type { Look, BlinkConfig } from './timeline';
 export interface DashyOptions {
     /** Seed for the (deterministic) randomness: blink timing, glances. */
     seed?: number;
     /** Eye height multiplier. Default 55/66 = golden ratio with 34 wide eyes (34 x 55). Use 1 for 34 x 66. */
     eyeScale?: number;
+    /** Ambient life (micro-saccades in the eyes, slow drift in the body). false/0 = off (default here, so the recorded reference stays exact), true = 1, or a strength. */
+    ambient?: boolean | number;
+    /** Head turn: the eye on the far side narrows when he looks sideways, up/down squashes the eyes. false/0 = off (default), true = 1, or a strength. */
+    perspective?: boolean | number;
+    /** Blink timing. Default: every 2.0 to 5.2 s, about 175 ms long. */
+    blink?: BlinkConfig;
 }
 export interface EyeGeometry {
     x: number;
@@ -59,6 +66,15 @@ export interface Dashy {
     poke(now: number): void;
     /** nx, ny in -1..1 relative to the centre of the avatar */
     pointer(nx: number, ny: number, now: number): void;
+    /** Override the eyes of the current state (a custom expression). null = back to the state's own look. `spring` sets how fast the eyes get there. */
+    setLook(look: Look | null, spring?: {
+        k: number;
+        d: number;
+    }): void;
+    setAmbient(strength: boolean | number): void;
+    setPerspective(strength: boolean | number): void;
+    setBlink(cfg: BlinkConfig | null): void;
     step(now: number): Geometry;
 }
+import type { BlinkConfig, Look } from './timeline';
 export declare function createDashy(options?: DashyOptions): Dashy;

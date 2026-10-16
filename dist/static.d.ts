@@ -1,5 +1,7 @@
 import { type DashyState, type Geometry, type Shape } from './core';
 import { type Variant } from './small';
+import { type Colors } from './definition';
+import { type Background } from './photo';
 export declare const ALL_STATES: DashyState[];
 /**
  * One deterministic still of a state, straight from core.ts: same seed and pointer, 60 fps, first frame
@@ -9,8 +11,10 @@ export declare const ALL_STATES: DashyState[];
 export declare function settledGeometry(state: DashyState, shape?: Shape, seed?: number): Geometry;
 export interface StaticOptions {
     variant?: Exclude<Variant, 'auto'>;
-    /** Fill behind the body for app icons (full bleed). Omit for transparent. */
-    background?: string;
+    /** Fill behind the body for app icons (full bleed): a colour, or a linear/radial gradient. Omit for transparent. */
+    background?: Background;
+    /** Body, eye and outline colours. Default: white body, near-black eyes. */
+    colors?: Partial<Colors>;
     /** Extra space around the body, in the 300-unit coordinate system. Default 20 (= viewBox 20..280). */
     margin?: number;
     /** Title text for screen readers / file previews. */

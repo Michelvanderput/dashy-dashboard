@@ -1,5 +1,9 @@
 import { faceMotion, layout, type FaceMotionOptions } from './render';
 import { smallGeometry, SMALL_MAX_PX, type Variant } from './small';
+import { DEFAULT_COLORS, validateDefinition, isBuiltInState, type Colors, type DashyDefinition } from './definition';
+import { createSequencePlayer, springFor, type Expression, type Sequence, type SequencePlayer } from './timeline';
+import { renderSvg, stillGeometry, type StaticOptions } from './static';
+import { renderPng } from './photo';
 import { createDashy, type Dashy, type DashyOptions, type DashyState, type Geometry, type Shape } from './core';
 
 export interface MountOptions extends DashyOptions {
@@ -17,6 +21,23 @@ export interface MountOptions extends DashyOptions {
    * around and blink). The eyes are guaranteed to stay inside the block.
    */
   body?: FaceMotionOptions;
+  /** Body, eye and outline colours. Default: white body, near-black eyes. */
+  colors?: Partial<Colors>;
+  /** A Dashy definition (look, custom expressions, sequences). Validated on mount; an invalid one throws with the first problem. */
+  definition?: unknown;
+  /** Ambient life: micro-saccades and slow drift. Default true. Not shown with reduced motion. */
+  ambient?: boolean | number;
+  /** Head turn: a little 3D when he looks sideways. Default true. */
+  perspective?: boolean | number;
+  /** Called when a `once` sequence has played its last step (he then holds that expression until `stop()`). */
+  onSequenceEnd?: (key: string) => void;
+}
+export interface SnapshotOptions extends Omit<StaticOptions, 'variant'> {
+  format?: 'svg' | 'png';
+  /** PNG size in px. Default 512. */
+  size?: number;
+  /** Hold the body still and keep the expression (what app icons need). Default false: the exact frame on screen. */
+  still?: boolean;
 }
 export interface DashyHandle {
   dashy: Dashy;
@@ -26,6 +47,15 @@ export interface DashyHandle {
   poke(): void;
   /** Look towards (nx, ny) in -1..1 relative to the centre, like a pointer would. */
   look(nx: number, ny: number): void;
+  /** Play a named sequence from the definition. Returns false when there is no such sequence. */
+  play(key: string): boolean;
+  /** Stop a running sequence and go back to the state that was set. */
+  stop(): void;
+  /** Show one named expression (custom, from the definition) or built-in state, and keep it. Returns false when unknown. */
+  express(key: string): boolean;
+  setColors(c: Partial<Colors>): void;
+  /** A still of what is on screen right now. SVG as text, PNG as a Blob. */
+  snapshot(o?: SnapshotOptions): Promise<string | Blob>;
   destroy(): void;
 }
 
@@ -41,7 +71,15 @@ const f = (v: number) => v.toFixed(2);
 
 export function mountDashy(container: HTMLElement, opts: MountOptions = {}): DashyHandle {
   const id = 'dashy' + ++uid;
-  const dashy = createDashy({ seed: opts.seed ?? Math.floor(Math.random() * 1e6) + 1, eyeScale: opts.eyeScale });
+  let def: Readonly<DashyDefinition> | null = null;
+  if (opts.definition !== undefined) {
+    const v = validateDefinition(opts.definition);
+    if (!v.ok) throw new Error(`Invalid Dashy definition at ${v.errors[0].path || '/'}: ${v.errors[0].message}`);
+    def = v.value;
+  }
+  let colors: Colors = { ...DEFAULT_COLORS };
+  const dashy = createDashy({ seed: opts.seed ?? Math.floor(Math.random() * 1e6) + 1, eyeScale: opts.eyeScale ?? def?.eyeScale,
+    ambient: opts.ambient ?? true, perspective: opts.perspective ?? true });
   const labels = { ...DEFAULT_LABELS, ...opts.labels };
   const reduced = () => opts.reducedMotion ?? (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -77,7 +115,18 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     return { g: q<SVGGElement>(`.eye${s}`), pill, lid, low: m.querySelector('ellipse')! };
   });
 
+  const COLOR = /^(?:#[0-9a-f]{3,8}|[a-z]+|(?:rgb|hsl)a?\([0-9 ,.%/-]+\))$/i;
+  function applyColors(c: Partial<Colors>) {
+    for (const [k, v] of Object.entries(c)) if (v !== undefined && !COLOR.test(v)) throw new Error(`Invalid colour for ${k}: ${v}`);
+    colors = { ...colors, ...c };
+    eyes.forEach(e => e.g.querySelector('rect')!.setAttribute('fill', colors.eyes));
+    if (outline) { outline.setAttribute('fill', colors.body); outline.setAttribute('stroke', colors.outline); }
+  }
+  applyColors({ ...def?.colors, ...opts.colors });
+
   let small = opts.variant === 'small';
+  let lastG: Geometry | null = null;
+  let seqKey: string | null = null, player: SequencePlayer | null = null;
   const set = (el: Element, attrs: Record<string, string>) => { for (const k in attrs) el.setAttribute(k, attrs[k]); };
   // body mode: size of the card in px, and px per core unit (the body is 220 units wide in core.ts)
   let W = 0, H = 0, u = 1;
@@ -87,6 +136,7 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     svg.setAttribute('viewBox', `${f(150 - W / (2 * u))} ${f(150 - H / (2 * u))} ${f(W / u)} ${f(H / u)}`);
   }
   function draw(G0: Geometry) {
+    lastG = G0;
     const L = layout(small && !bodyMode ? smallGeometry(G0) : G0, small && !bodyMode);
     if (!bodyMode) {
       outline!.setAttribute('stroke-width', L.outlineWidth); outline!.setAttribute('rx', L.outlineRx); clip!.setAttribute('rx', L.clipRx);
@@ -111,8 +161,25 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     for (let i = 0; i < 90; i++) { t += 16.7; G = dashy.step(t); }
     draw(G);
   }
+  const ownExpr = (key: string): Expression | undefined => (def && Object.prototype.hasOwnProperty.call(def.expressions, key) ? def.expressions[key] : undefined);
+  /** Shows one expression: a custom one from the definition (state and/or look), or a built-in state by name. */
+  function applyExpression(key: string, spring?: { k: number; d: number }): boolean {
+    const ex = ownExpr(key);
+    if (!ex && !isBuiltInState(key)) return false;
+    const target = ex ? ex.state : (key as DashyState);
+    if (target && target !== dashy.getState()) dashy.setState(target, now());
+    dashy.setLook(ex?.look ?? null, spring);
+    setTitle();
+    return true;
+  }
+  function tickSequence(t: number) {
+    const r = player!.tick(t);
+    if (r.changed) applyExpression(r.step.expression, springFor(r.step.transitionMs, r.step.ease));
+    if (r.done) { const k = seqKey!; player = null; seqKey = null; opts.onSequenceEnd?.(k); }
+  }
   function loop(t: number) {
     if (destroyed) return;
+    if (player) tickSequence(t);
     const G = dashy.step(t);
     draw(G);
     if (title.textContent !== labels[G.cur]) setTitle(); // keeps the label right when core moves on by itself (received -> working, done -> idle)
@@ -120,10 +187,11 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
   }
   function applyMotionPreference() {
     cancelAnimationFrame(raf); raf = 0;
+    dashy.setAmbient(reduced() ? 0 : opts.ambient ?? true);
     if (reduced()) { settleAndDraw(); setTitle(); } else if (!paused()) raf = requestAnimationFrame(loop);
   }
 
-  if (opts.shape) dashy.setShape(opts.shape);
+  if (opts.shape ?? def?.shape) dashy.setShape((opts.shape ?? def?.shape)!);
   if (opts.initialState) dashy.setState(opts.initialState, now());
   setTitle();
 
@@ -157,6 +225,26 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     setShape(s) { dashy.setShape(s); if (reduced()) settleAndDraw(); },
     poke: onDown,
     look(nx, ny) { if (!reduced()) dashy.pointer(nx, ny, now()); },
+    play(key) {
+      if (!def || !Object.prototype.hasOwnProperty.call(def.sequences, key)) return false;
+      const sq: Sequence = def.sequences[key];
+      seqKey = key; player = createSequencePlayer(sq); player.start(now());
+      dashy.setBlink(sq.blink ?? null);
+      if (reduced()) { // no motion: show the end of a once-sequence, the first step of the others, as one still
+        const step = sq.mode === 'once' ? sq.steps[sq.steps.length - 1] : sq.steps[0];
+        applyExpression(step.expression); player = null; seqKey = null; settleAndDraw();
+      } else if (!raf && !paused()) raf = requestAnimationFrame(loop);
+      return true;
+    },
+    stop() { player = null; seqKey = null; dashy.setBlink(null); dashy.setLook(null); if (reduced()) settleAndDraw(); },
+    express(key) { player = null; seqKey = null; const ok = applyExpression(key); if (ok && reduced()) settleAndDraw(); return ok; },
+    setColors: applyColors,
+    async snapshot(o = {}) {
+      const { format = 'svg', size = 512, still = false, ...rest } = o;
+      if (!lastG) throw new Error('Nothing drawn yet');
+      const svgText = renderSvg(still ? stillGeometry(lastG) : lastG, { variant: small ? 'small' : 'full', colors, idPrefix: id + 's', ...rest });
+      return format === 'png' ? renderPng(svgText, size) : svgText;
+    },
     destroy() {
       destroyed = true; cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', onVisibility); io?.disconnect(); ro?.disconnect();

@@ -1,6 +1,8 @@
 import { createDashy, type DashyState, type Geometry, type Shape } from './core';
 import { layout } from './render';
 import { smallGeometry, type Variant } from './small';
+import { DEFAULT_COLORS, type Colors } from './definition';
+import { backgroundDefs, type Background } from './photo';
 
 export const ALL_STATES: DashyState[] = ['idle', 'received', 'working', 'thinking', 'waiting', 'blocked', 'done', 'happy', 'sad', 'angry', 'strict', 'dancing', 'sleepy'];
 
@@ -29,8 +31,10 @@ export function settledGeometry(state: DashyState, shape: Shape = 'square', seed
 
 export interface StaticOptions {
   variant?: Exclude<Variant, 'auto'>;
-  /** Fill behind the body for app icons (full bleed). Omit for transparent. */
-  background?: string;
+  /** Fill behind the body for app icons (full bleed): a colour, or a linear/radial gradient. Omit for transparent. */
+  background?: Background;
+  /** Body, eye and outline colours. Default: white body, near-black eyes. */
+  colors?: Partial<Colors>;
   /** Extra space around the body, in the 300-unit coordinate system. Default 20 (= viewBox 20..280). */
   margin?: number;
   /** Title text for screen readers / file previews. */
@@ -47,18 +51,20 @@ export function renderSvg(G0: Geometry, o: StaticOptions = {}): string {
   const L = layout(small ? smallGeometry(G0) : G0, small);
   const id = o.idPrefix ?? 'd';
   const m = o.margin ?? 20, size = 300 - 2 * m;
+  const c = { ...DEFAULT_COLORS, ...o.colors };
   const eye = (side: 'L' | 'R', i: number) => {
     const e = L.eyes[i];
     const attrs = (a: Record<string, string>) => Object.entries(a).map(([k, v]) => `${k}="${v}"`).join(' ');
     return { mask: `<mask id="${id}m${side}" maskUnits="userSpaceOnUse" x="-120" y="-120" width="240" height="240"><rect fill="#fff" ${attrs(e.pill)}/><rect fill="#000" ${attrs(e.lid)}/><ellipse fill="#000" ${attrs(e.low)}/></mask>`,
-      use: `<g transform="${e.group}"><rect x="-80" y="-100" width="160" height="200" fill="#101214" mask="url(#${id}m${side})"/></g>` };
+      use: `<g transform="${e.group}"><rect x="-80" y="-100" width="160" height="200" fill="${esc(c.eyes)}" mask="url(#${id}m${side})"/></g>` };
   };
   const l = eye('L', 0), r = eye('R', 1);
-  const bg = o.background ? `<rect x="0" y="0" width="300" height="300" fill="${esc(o.background)}"/>` : '';
+  const bgd = o.background ? backgroundDefs(o.background, id) : null;
+  const bg = bgd ? `<rect x="0" y="0" width="300" height="300" fill="${bgd.fill}"/>` : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${m} ${m} ${size} ${size}" role="img">
 <title>${esc(o.title ?? 'Dashy')}</title>
-<defs><clipPath id="${id}c"><rect x="40" y="40" width="220" height="220" rx="${L.clipRx}"/></clipPath>${l.mask}${r.mask}</defs>
-${bg}<g transform="${L.body}"><rect x="40.5" y="40.5" width="219" height="219" rx="${L.outlineRx}" fill="#fff" stroke="#c9c9c4" stroke-width="${L.outlineWidth}"/><g clip-path="url(#${id}c)"><g transform="${L.face}">${l.use}${r.use}</g></g></g>
+<defs><clipPath id="${id}c"><rect x="40" y="40" width="220" height="220" rx="${L.clipRx}"/></clipPath>${bgd ? bgd.defs : ''}${l.mask}${r.mask}</defs>
+${bg}<g transform="${L.body}"><rect x="40.5" y="40.5" width="219" height="219" rx="${L.outlineRx}" fill="${esc(c.body)}" stroke="${esc(c.outline)}" stroke-width="${L.outlineWidth}"/><g clip-path="url(#${id}c)"><g transform="${L.face}">${l.use}${r.use}</g></g></g>
 </svg>
 `;
 }

@@ -1,7 +1,15 @@
 export { createDashy } from './core';
 export type { Dashy, DashyOptions, DashyState, EyeGeometry, Geometry, Mood, Shape, Status } from './core';
 export { mountDashy } from './svg';
-export type { DashyHandle, MountOptions } from './svg';
+export type { DashyHandle, MountOptions, SnapshotOptions } from './svg';
+export { AMBIENT_WEIGHTS, ambientAt } from './ambient';
+export { eyePerspective } from './perspective';
+export { LOOK_RANGE, createSequencePlayer, springFor, stepAt } from './timeline';
+export type { BlinkConfig, Ease, Expression, Look, PlaybackMode, Sequence, SequencePlayer, Step } from './timeline';
+export { DEFAULT_COLORS, DEFINITION_SCHEMA, parseDefinition, validateDefinition } from './definition';
+export type { Colors, DashyDefinition, DefinitionError, DefinitionResult } from './definition';
+export { backgroundDefs, renderPng } from './photo';
+export type { Background } from './photo';
 export { DEFAULT_CONFIG, RULES, initialDriverState, nextWakeAt, reduce, resolve } from './driver';
 export type { DriverConfig, DriverEvent, DriverState, Resolution, RuleName } from './driver';
 export { smallGeometry, SMALL_MAX_PX } from './small';

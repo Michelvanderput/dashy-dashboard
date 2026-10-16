@@ -6,7 +6,7 @@ Dashy is een levende avatar (twee zwarte pilvormige ogen op een wit lichaam) en 
 
 ```bash
 npm install
-npm test        # 34 tests: grenzen, soepelheid, scenario's
+npm test        # grenzen, soepelheid, scenario's, ambient, sequenties, definitie
 npm run build   # dist/dashy.js en types
 ```
 
@@ -29,6 +29,46 @@ Het element waar je Dashy in zet bepaalt de grootte (vierkant, schaalt mee).
 - `tests/sim.test.ts`: dient tegelijk als specificatie. Een Swift- of Kotlin-port is klaar zodra dezelfde scenario's slagen.
 
 Standaard zijn de ogen 34 x 55 (gulden snede). Voor 34 x 66: `createDashy({ eyeScale: 1 })`.
+
+## Meer leven: ambient, kopdraai, sequenties
+
+Dashy combineert zijn eigen veerfysica en toestanden met ideeën uit [bible-strong-avatar-lab](https://github.com/smontlouis/bible-strong-avatar-lab) (uitdrukkingen, tijdlijnen, één JSON-definitie, photo mode). Die lab is AGPL-3.0; er is **geen code of dependency overgenomen**, alles is opnieuw gebouwd in Dashy's eigen kern.
+
+| Wat | Waar | Standaard |
+|---|---|---|
+| **Ambient leven**: micro-saccades in de ogen en een trage zweving in het lijf, nooit helemaal stil | `ambient.ts` | aan in `mountDashy`, uit in `createDashy` |
+| **Kopdraai**: kijkt hij opzij, dan wordt het verste oog smaller en het dichtste iets groter; omhoog/omlaag drukt de ogen plat | `perspective.ts` | idem |
+| **Sequenties**: tijdlijn van uitdrukkingen met hold, overgang, `loop` / `once` / `pingPong` en eigen knipperritme | `timeline.ts` | n.v.t. |
+| **Definitie-JSON**: kleuren, vorm, ooggrootte, eigen uitdrukkingen en sequenties in één bestand, met validatie | `definition.ts` | n.v.t. |
+| **Photo mode**: SVG of PNG van wat nu op het scherm staat, met transparante, effen of verloop-achtergrond | `photo.ts` | n.v.t. |
+
+`createDashy` houdt ambient en kopdraai standaard **uit**, zodat de opgenomen referentie voor de Swift-port (`swift:reference`) en de statische exports exact gelijk blijven. `mountDashy` zet ze aan, behalve bij "minder beweging".
+
+```ts
+import { mountDashy } from 'dashy-avatar';
+
+const dashy = mountDashy(el, {
+  definition: {
+    schema: 'dashy/avatar-definition', schemaVersion: 1, shape: 'circle',
+    colors: { body: '#ffe7a8', eyes: '#2a1b3d' },
+    expressions: { smug: { state: 'idle', look: { cover: 0.45, lidA: -6, low: 0.2 } } },
+    sequences: {
+      hello: { mode: 'once', steps: [
+        { expression: 'smug',  holdMs: 700, transitionMs: 250 },
+        { expression: 'happy', holdMs: 900, transitionMs: 200, ease: 'snappy' },
+      ] },
+    },
+  },
+  onSequenceEnd: key => console.log(key, 'klaar'),   // hij blijft op de laatste stap staan tot stop()
+});
+dashy.play('hello');            // of dashy.express('smug'), dashy.stop()
+const svg = await dashy.snapshot({ background: { type: 'radial', from: '#fff', to: '#ccd' } });
+const png = await dashy.snapshot({ format: 'png', size: 512 });   // Blob
+```
+
+React: `<Dashy definition={def} sequence="hello" colors={{ body: '#fff' }} />`.
+
+De `look` van een uitdrukking heeft dezelfde namen als de tabel in `core.ts`: `sd` (afstand tussen de ogen), `eh` (oog-hoogte), `cover` (bovenooglid), `lidA` (schuinte), `low` (blij-boog), `tilt`, `asym`. Een uitdrukking mag ook alleen een `state` hebben (een eigen naam voor een ingebouwde stand). Ongeldige definities worden geweigerd met een JSON-pointer naar het eerste probleem (`parseDefinition` / `validateDefinition`, max 256 KiB, geen dependencies).
 
 ## Aansturen vanuit je app
 

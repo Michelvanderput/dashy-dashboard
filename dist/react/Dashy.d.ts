@@ -14,10 +14,19 @@ export interface DashyProps {
     variant?: 'full' | 'small' | 'auto';
     /** Force reduced motion. Default: follow the system setting. */
     reducedMotion?: boolean;
+    /** Look, custom expressions and sequences (see definition.ts). Read when Dashy mounts. */
+    definition?: unknown;
+    /** Name of a sequence from the definition to play; changing it plays the new one, undefined stops. */
+    sequence?: string;
+    /** Body, eye and outline colours. */
+    colors?: MountOptions['colors'];
+    /** Ambient life and head turn, both default on. */
+    ambient?: boolean | number;
+    perspective?: boolean | number;
     /** Seed for blink timing and glances. Read when Dashy mounts. */
     seed?: number;
     className?: string;
     style?: CSSProperties;
 }
 /** Dashy as a React component. All motion comes from core.ts; this only mounts it and passes props through. */
-export declare function Dashy({ state, shape, size, labels, announce, variant, reducedMotion, seed, className, style }: DashyProps): import("react").JSX.Element;
+export declare function Dashy({ state, shape, size, labels, announce, variant, reducedMotion, seed, definition, sequence, colors, ambient, perspective, className, style }: DashyProps): import("react").JSX.Element;
