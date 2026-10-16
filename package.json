@@ -15,7 +15,9 @@
     "test": "tsx --test tests/*.test.ts && vitest run",
     "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && tsc -p tsconfig.build.json && node scripts/make-demo.mjs",
     "demo": "node scripts/make-demo.mjs",
-    "export": "tsx scripts/export-static.ts"
+    "export": "tsx scripts/export-static.ts",
+    "swift:reference": "tsx scripts/swift-reference.ts",
+    "swift:test": "cd swift/DashyKit && swift test"
   },
   "license": "UNLICENSED",
   "dependencies": {
