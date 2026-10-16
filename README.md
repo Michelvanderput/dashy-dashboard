@@ -64,6 +64,23 @@ De achtergrondkleur van de app-iconen staat bovenaan `scripts/export-static.ts` 
 
 ![alle toestanden](exports/docs/states.png)
 
+## Advies van Claude (optioneel)
+
+Claude kiest een toestand en één korte zin in Dashy's karakter op basis van je agenda en taken. Het antwoord is strikt `{ "state": "...", "line": "..." }`.
+
+```ts
+import { fetchAdvice, mergeAdvice } from 'dashy-avatar/advice';
+
+const advice = await fetchAdvice({ now: new Date().toISOString(), tasks, agenda }, { url: '/api/dashy-advice', token });
+const { state, line } = mergeAdvice(driverResolution, advice);   // de driver wint bij deadlines, blokkades, pauze enz.
+```
+
+- **Toegestane toestanden:** `idle, working, thinking, waiting, happy, sad, angry, strict, dancing, sleepy`. Niet `received`, `done` en `blocked`: die komen uit gebeurtenissen van de app.
+- **Veilige terugval:** bij elke fout (netwerk, timeout, status, ongeldig of te uitgebreid antwoord, niet-toegestane toestand) is het resultaat `{ state: 'idle', line: '' }`. De client en de server controleren het antwoord allebei opnieuw. Elke serverreactie, ook een fout, heeft precies die vorm.
+- **Server:** `api/dashy-advice.ts` (Vercel Function) roept Claude aan met de AI SDK (`claude-opus-5-5`, `effort: low`, strikt JSON-schema). Zie `.env.example` voor de variabelen. Zonder `DASHY_API_TOKEN` of zonder Upstash (rate limit, 20 per uur per adres) doet de route geen modelaanroep.
+- **Taken en agenda zijn gegevens, geen instructies:** ze gaan begrensd (40 taken, 20 afspraken, 80 tekens per titel) en schoongemaakt in een `<data>`-blok naar het model.
+- **Privacy:** titels en tijden van je taken en afspraken gaan naar Anthropic. Stuur geen details mee die je daar niet wilt hebben.
+
 ## Andere platforms
 
 | Platform | Aanpak |

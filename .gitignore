@@ -1,3 +1,6 @@
 node_modules
 swift/DashyKit/.build
 swift/DashyKit/.swiftpm
+.env
+.env.local
+.vercel
