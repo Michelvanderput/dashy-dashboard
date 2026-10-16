@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import { waitFor, act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NowPlayingBlock, useSpotify } from '../../src/react';
 import { parseCurrentlyPlaying, type NowPlaying } from '../../src/spotify/model';
@@ -45,9 +45,11 @@ describe('<NowPlayingBlock />', () => {
 
   it("follows Spotify's design rules: link back, rounded corners, logo only with metadata, nothing on top of the art", () => {
     const { container, rerender } = render(<NowPlayingBlock nowPlaying={mk()} status="connected" spotifyLogoSrc="/spotify-logo.svg" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Meer opties' }));
     const a = screen.getByText('LISTEN ON SPOTIFY') as HTMLAnchorElement;
     expect(a.href).toBe('https://open.spotify.com/track/a'); expect(a.rel).toBe('noopener noreferrer'); expect(a.target).toBe('_blank');
     const logo = container.querySelector('img.dnp-logo') as HTMLImageElement; expect(logo.alt).toBe('Spotify'); expect(logo.width).toBeGreaterThanOrEqual(70);
+    expect((logo.parentElement as HTMLAnchorElement).href).toBe('https://open.spotify.com/track/a'); // the visible logo is a link back to Spotify too
     expect((container.querySelector('.dnp') as HTMLElement).style.getPropertyValue('--rc')).toBe('4px');
     expect(container.querySelector('.dnp-sleeve')!.children).toHaveLength(1); // only the image, no overlay
     rerender(<NowPlayingBlock nowPlaying={mk()} status="connected" size={320} />);
@@ -71,7 +73,53 @@ describe('<NowPlayingBlock />', () => {
     rerender(<NowPlayingBlock nowPlaying={null} status="connecting" onConnect={onConnect} />); expect(screen.getByRole('status').textContent).toMatch(/Verbinden/); expect(screen.queryByRole('button')).toBeNull();
     rerender(<NowPlayingBlock nowPlaying={null} status="error" error="Kapot" onConnect={onConnect} />); expect(screen.getByRole('alert').textContent).toBe('Kapot');
     rerender(<NowPlayingBlock nowPlaying={null} status="connected" onDisconnect={onDisconnect} />); expect(screen.getByText('Er speelt niets')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Ontkoppel' })); expect(onDisconnect).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Meer opties' })); fireEvent.click(screen.getByRole('menuitem', { name: 'Ontkoppel' })); expect(onDisconnect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('the "..." menu: closed by default, keyboard friendly, closes on Escape and outside click, no menu when there is nothing in it', () => {
+    const { rerender } = render(<div><button>outside</button><NowPlayingBlock nowPlaying={mk()} status="connected" onDisconnect={() => {}} /></div>);
+    const trigger = screen.getByRole('button', { name: 'Meer opties' });
+    expect(screen.queryByRole('menu')).toBeNull(); expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(trigger); expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const items = screen.getAllByRole('menuitem'); expect(items.map(i => i.textContent)).toEqual(['LISTEN ON SPOTIFY', 'Ontkoppel']); expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(items[0], { key: 'ArrowDown' }); expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1], { key: 'ArrowDown' }); expect(document.activeElement).toBe(items[0]); // wraps
+    fireEvent.keyDown(items[0], { key: 'ArrowUp' }); expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1], { key: 'Escape' }); expect(screen.queryByRole('menu')).toBeNull(); expect(document.activeElement).toBe(trigger); // back to where you were
+    fireEvent.click(trigger); expect(screen.getByRole('menu')).toBeTruthy(); fireEvent.pointerDown(screen.getByText('outside')); expect(screen.queryByRole('menu')).toBeNull();
+    rerender(<div><NowPlayingBlock nowPlaying={mk({ trackUrl: null })} status="connected" /></div>); expect(screen.queryByRole('button', { name: 'Meer opties' })).toBeNull();
+    rerender(<div><NowPlayingBlock nowPlaying={null} status="disconnected" onConnect={() => {}} onDisconnect={() => {}} /></div>); expect(screen.queryByRole('button', { name: 'Meer opties' })).toBeNull(); // not connected: "connect" stays visible instead
+  });
+
+  it('controls: previous, play/pause (reflecting the state) and next, one command at a time; hidden without permission', async () => {
+    let release!: () => void; const gate = new Promise<void>(r => (release = r));
+    const onControl = vi.fn(async (_c: string) => { await gate; return true; });
+    const { rerender } = render(<NowPlayingBlock nowPlaying={mk()} status="connected" onControl={onControl} canControl />);
+    expect(screen.getByRole('group', { name: 'Bediening' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pauzeer' })); expect(onControl).toHaveBeenLastCalledWith('pause');
+    fireEvent.click(screen.getByRole('button', { name: 'Volgende' })); expect(onControl).toHaveBeenCalledTimes(1); // busy: a second tap is ignored
+    expect((screen.getByRole('button', { name: 'Volgende' }) as HTMLButtonElement).disabled).toBe(true);
+    release(); await waitFor(() => expect((screen.getByRole('button', { name: 'Volgende' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Vorige' })); expect(onControl).toHaveBeenLastCalledWith('previous');
+    rerender(<NowPlayingBlock nowPlaying={mk({ playing: false })} status="connected" onControl={onControl} canControl />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Speel af' })).toBeTruthy());
+    rerender(<NowPlayingBlock nowPlaying={mk()} status="connected" onControl={onControl} />); expect(screen.queryByRole('group', { name: 'Bediening' })).toBeNull();
+    rerender(<NowPlayingBlock nowPlaying={mk()} status="connected" onControl={onControl} canControl={false} />); expect(screen.queryByRole('group', { name: 'Bediening' })).toBeNull();
+  });
+
+  it('an old login offers to connect again for the controls, and a failed control says why', () => {
+    const onConnect = vi.fn();
+    const { rerender } = render(<NowPlayingBlock nowPlaying={mk()} status="connected" onConnect={onConnect} onControl={vi.fn()} needsReconnect />);
+    expect(screen.queryByRole('group', { name: 'Bediening' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Koppel opnieuw voor bediening' })); expect(onConnect).toHaveBeenCalledOnce();
+    rerender(<NowPlayingBlock nowPlaying={mk()} status="connected" onControl={vi.fn()} canControl controlError="Bedienen werkt alleen met Spotify Premium." />);
+    expect(screen.getByText('Bedienen werkt alleen met Spotify Premium.')).toBeTruthy();
+  });
+
+  it('layout guard: the block never asks for container sizing (it collapsed the block inside shrink-to-fit cards)', () => {
+    const { container } = render(<NowPlayingBlock nowPlaying={mk()} status="connected" />);
+    expect(container.querySelector('style')!.textContent).not.toMatch(/container-type|\bcqw\b/);
   });
 
   it('the progress bar moves while playing and is hidden from screen readers; two blocks can share a page', () => {
@@ -97,11 +145,12 @@ describe('<NowPlayingBlock />', () => {
 describe('useSpotify', () => {
   it('starts the session on mount, mirrors its state, and stops it on unmount', async () => {
     let state = { status: 'disconnected' as const, nowPlaying: null as NowPlaying | null }; const subs = new Set<() => void>();
-    const session = { getState: () => state, subscribe: (f: () => void) => { subs.add(f); return () => subs.delete(f); }, start: vi.fn(async () => {}), stop: vi.fn(), nudge: vi.fn(), connect: vi.fn(async () => {}), disconnect: vi.fn() } as unknown as SpotifySession;
+    const session = { getState: () => state, subscribe: (f: () => void) => { subs.add(f); return () => subs.delete(f); }, start: vi.fn(async () => {}), stop: vi.fn(), nudge: vi.fn(), connect: vi.fn(async () => {}), disconnect: vi.fn(), control: vi.fn(async () => true), canControl: () => true, needsReconnect: () => false } as unknown as SpotifySession;
     const { result, unmount } = renderHook(() => useSpotify({ clientId: 'c', redirectUri: 'https://x/cb', session }));
     expect(session.start).toHaveBeenCalledOnce(); expect(result.current.status).toBe('disconnected');
     act(() => { state = { status: 'connected', nowPlaying: mk() } as never; subs.forEach(f => f()); });
     expect(result.current.nowPlaying?.title).toBe('Midnight Roses');
+    expect(result.current.canControl).toBe(true); expect(result.current.needsReconnect).toBe(false); void result.current.control('next'); expect((session.control as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('next');
     act(() => { result.current.connect(); result.current.disconnect(); }); expect(session.connect).toHaveBeenCalled(); expect(session.disconnect).toHaveBeenCalled();
     act(() => { document.dispatchEvent(new Event('visibilitychange')); }); expect(session.nudge).toHaveBeenCalled();
     unmount(); expect(session.stop).toHaveBeenCalled();

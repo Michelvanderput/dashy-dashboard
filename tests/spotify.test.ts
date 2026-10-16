@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { POLL, musicState, nextPollDelay, parseCurrentlyPlaying, pickCover, progressAt, vinylColor, VINYL_COLORS } from '../src/spotify/model';
-import { AuthError, beginLogin, buildAuthorizeUrl, challengeFor, checkRedirectUri, completeLogin, loadTokens, randomString, refreshTokens, saveTokens, type KeyValueStore } from '../src/spotify/auth';
-import { fetchCurrentlyPlaying } from '../src/spotify/client';
+import { AuthError, CONTROL_SCOPE, hasScope, beginLogin, buildAuthorizeUrl, challengeFor, checkRedirectUri, completeLogin, loadTokens, randomString, refreshTokens, saveTokens, type KeyValueStore } from '../src/spotify/auth';
+import { fetchCurrentlyPlaying, sendCommand } from '../src/spotify/client';
 import { MESSAGES, createSpotifySession } from '../src/spotify/session';
 import { RULES } from '../src/driver';
 
@@ -92,7 +92,7 @@ test('PKCE: verifier alphabet and length, and the RFC 7636 challenge example', a
 test('authorize URL has everything Spotify needs and no secret', () => {
   const u = new URL(buildAuthorizeUrl({ clientId: 'cid', redirectUri: 'https://app/cb', state: 's', challenge: 'c' }));
   assert.equal(u.origin + u.pathname, 'https://accounts.spotify.com/authorize');
-  assert.deepEqual(Object.fromEntries(u.searchParams), { client_id: 'cid', response_type: 'code', redirect_uri: 'https://app/cb', state: 's', code_challenge_method: 'S256', code_challenge: 'c', scope: 'user-read-currently-playing' });
+  assert.deepEqual(Object.fromEntries(u.searchParams), { client_id: 'cid', response_type: 'code', redirect_uri: 'https://app/cb', state: 's', code_challenge_method: 'S256', code_challenge: 'c', scope: 'user-read-currently-playing user-modify-playback-state' });
 });
 test('login round trip: begin, return with code, exchange with the verifier, tokens', async () => {
   const pending = store(); let navigated = '';
@@ -270,4 +270,64 @@ test('session: returning from Spotify works when start() runs twice (React Stric
   assert.equal(h.calls.filter(c => c.url.includes('/api/token')).length, 1, 'the single-use code is exchanged once');
   assert.equal(h.url, 'https://app/cb', 'code and state are removed from the address bar');
   assert.equal(loadTokens(h.tokens)!.refreshToken, 'RT'); h.s.stop();
+});
+
+
+// ---------- controls ----------
+const resp = (status: number, body?: unknown) => async () => new Response(body === undefined ? null : JSON.stringify(body), { status });
+test('sendCommand: right method and path per command, and every outcome is a result (never a throw)', async () => {
+  const seen: { url: string; method?: string; auth: string | null }[] = [];
+  const f = (async (url: string, init: RequestInit) => { seen.push({ url, method: init.method, auth: new Headers(init.headers).get('authorization') }); return new Response(null, { status: 204 }); }) as typeof fetch;
+  for (const command of ['play', 'pause', 'next', 'previous'] as const) assert.deepEqual(await sendCommand({ accessToken: 'AT', command, fetch: f }), { kind: 'ok' });
+  assert.deepEqual(seen.map(x => `${x.method} ${x.url.replace('https://api.spotify.com/v1/me/player/', '')}`), ['PUT play', 'PUT pause', 'POST next', 'POST previous']);
+  assert.ok(seen.every(x => x.auth === 'Bearer AT'));
+  const r = (status: number, body?: unknown) => sendCommand({ accessToken: 'AT', command: 'next', fetch: resp(status, body) as unknown as typeof fetch });
+  assert.deepEqual(await r(401), { kind: 'unauthorized' }); assert.deepEqual(await r(429), { kind: 'rate-limited' });
+  assert.deepEqual(await r(403, { error: { reason: 'PREMIUM_REQUIRED' } }), { kind: 'premium' }); assert.deepEqual(await r(403, {}), { kind: 'forbidden' });
+  assert.deepEqual(await r(404, { error: { reason: 'NO_ACTIVE_DEVICE' } }), { kind: 'no-device' }); assert.deepEqual(await r(502), { kind: 'error' });
+  assert.deepEqual(await sendCommand({ accessToken: 'AT', command: 'next', fetch: (async () => { throw new TypeError('offline'); }) as typeof fetch }), { kind: 'error' });
+  assert.deepEqual(await sendCommand({ accessToken: 'AT', command: 'next', timeoutMs: 30, fetch: (() => new Promise<Response>(() => {})) as typeof fetch }), { kind: 'error' });
+});
+test('scope: the login asks for the control scope, remembers what was granted, and old logins do not have it', async () => {
+  assert.ok(new URL(buildAuthorizeUrl({ clientId: 'c', redirectUri: 'https://app/cb', state: 's', challenge: 'c' })).searchParams.get('scope')!.split(' ').includes(CONTROL_SCOPE));
+  assert.equal(hasScope(null, CONTROL_SCOPE), false); assert.equal(hasScope({}, CONTROL_SCOPE), false); assert.equal(hasScope({ scope: `user-read-currently-playing ${CONTROL_SCOPE}` }, CONTROL_SCOPE), true);
+  assert.equal(hasScope({ scope: 'user-read-currently-playing' }, CONTROL_SCOPE), false); assert.equal(hasScope({ scope: 'x' + CONTROL_SCOPE }, CONTROL_SCOPE), false, 'whole words only');
+  const f = (async () => json({ access_token: 'A', refresh_token: 'R', expires_in: 3600, scope: `user-read-currently-playing ${CONTROL_SCOPE}` })) as unknown as typeof fetch;
+  assert.equal((await refreshTokens({ clientId: 'c', refreshToken: 'R', fetch: f, now: T0 })).scope, `user-read-currently-playing ${CONTROL_SCOPE}`);
+});
+const loginWith = (h: ReturnType<typeof harness>, scope?: string) => saveTokens(h.tokens, { accessToken: 'AT', refreshToken: 'RT', expiresAt: T0 + 3_600_000, ...(scope ? { scope } : {}) });
+const withControl = `user-read-currently-playing ${CONTROL_SCOPE}`;
+
+test('session control: an old login (no scope) cannot control, says so, and sends nothing', async () => {
+  const h = harness(); loginWith(h); await h.s.start();
+  assert.deepEqual([h.s.canControl(), h.s.needsReconnect()], [false, true]);
+  const before = h.calls.length;
+  assert.equal(await h.s.control('pause'), false); assert.equal(h.calls.length, before); assert.equal(h.s.getState().controlError, MESSAGES.reconnect); h.s.stop();
+});
+test('session control: pause shows at once, keeps the position, asks Spotify again soon, and the next poll clears the message', async () => {
+  const h = harness(); loginWith(h, withControl); await h.s.start();
+  assert.deepEqual([h.s.canControl(), h.s.needsReconnect()], [true, false]);
+  h.respond = (u, init) => (u.endsWith('/pause') ? new Response(null, { status: 204 }) : json(track({ is_playing: false })));
+  const polls = () => h.calls.filter(c => c.url.includes('currently-playing')).length, p0 = polls();
+  await h.tick(3000); assert.equal(await h.s.control('pause'), true); // 3 s after the last answer, before the next poll
+  const cmd = h.calls.find(c => c.url.endsWith('/pause'))!; assert.equal(cmd.init.method, 'PUT'); assert.equal(new Headers(cmd.init.headers).get('authorization'), 'Bearer AT');
+  const np = h.s.getState().nowPlaying!; assert.equal(np.playing, false); assert.equal(np.progressMs, 33_000, 'it froze at the position reached (30 s + 3 s of play)');
+  await h.tick(1000); assert.ok(polls() > p0, 'it asked Spotify what is really playing'); assert.equal(h.s.getState().controlError, undefined); h.s.stop();
+});
+test('session control: Premium, no device and other failures each get a calm message; the track on screen stays', async () => {
+  const h = harness(); loginWith(h, withControl); await h.s.start(); const title = h.s.getState().nowPlaying!.title;
+  for (const [res, msg] of [[new Response(JSON.stringify({ error: { reason: 'PREMIUM_REQUIRED' } }), { status: 403 }), MESSAGES.premium], [new Response(JSON.stringify({ error: { reason: 'NO_ACTIVE_DEVICE' } }), { status: 404 }), MESSAGES.noDevice], [new Response(null, { status: 500 }), MESSAGES.controlFailed], [new Response(JSON.stringify({}), { status: 403 }), MESSAGES.reconnect]] as const) {
+    h.respond = (u) => (u.includes('/me/player/next') ? res.clone() : json(track())); assert.equal(await h.s.control('next'), false); assert.equal(h.s.getState().controlError, msg); assert.equal(h.s.getState().nowPlaying!.title, title);
+  }
+  h.respond = () => { throw new TypeError('offline'); }; assert.equal(await h.s.control('next'), false); assert.equal(h.s.getState().controlError, MESSAGES.controlFailed); h.s.stop();
+});
+test('session control: an expired token is refreshed once and the command is retried', async () => {
+  const h = harness(); loginWith(h, withControl); await h.s.start(); let n = 0;
+  h.respond = (u) => u.includes('accounts.spotify.com') ? json({ access_token: 'AT2', expires_in: 3600 }) : u.endsWith('/play') ? (n++ === 0 ? new Response(null, { status: 401 }) : new Response(null, { status: 204 })) : json(track());
+  assert.equal(await h.s.control('play'), true); assert.equal(n, 2);
+  assert.equal(new Headers(h.calls.filter(c => c.url.endsWith('/play')).pop()!.init.headers).get('authorization'), 'Bearer AT2');
+  assert.equal(loadTokens(h.tokens)!.scope, withControl, 'the refresh did not lose the scope'); h.s.stop();
+});
+test('session control: without a login nothing is sent', async () => {
+  const h = harness(); await h.s.start(); assert.equal(await h.s.control('play'), false); assert.equal(h.calls.length, 0);
 });

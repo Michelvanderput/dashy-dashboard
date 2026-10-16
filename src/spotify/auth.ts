@@ -2,11 +2,14 @@
  * Spotify Authorization Code flow with PKCE: no client secret, so it is safe to run inside a web or desktop app.
  * Everything that touches the outside (storage, network, navigation, time) is passed in, so it can be tested.
  */
-export const SCOPES = ['user-read-currently-playing'] as const;
+export const CONTROL_SCOPE = 'user-modify-playback-state';
+export const SCOPES = ['user-read-currently-playing', CONTROL_SCOPE] as const;
 const AUTHORIZE = 'https://accounts.spotify.com/authorize';
 const TOKEN = 'https://accounts.spotify.com/api/token';
 
-export interface TokenSet { accessToken: string; refreshToken: string; /** ms epoch */ expiresAt: number }
+export interface TokenSet { accessToken: string; refreshToken: string; /** ms epoch */ expiresAt: number; /** scopes Spotify granted (space separated). Missing on tokens saved before controls existed. */ scope?: string }
+/** Did the login include this scope? Old saved logins did not, so they have to log in again to get the controls. */
+export const hasScope = (t: Pick<TokenSet, 'scope'> | null, scope: string) => !!t?.scope && t.scope.split(' ').includes(scope);
 export interface KeyValueStore { get(key: string): string | null; set(key: string, value: string): void; remove(key: string): void }
 
 export class AuthError extends Error {
@@ -67,7 +70,7 @@ async function tokenRequest(body: Record<string, string>, f: typeof fetch, now: 
   // Spotify may leave the refresh token out when refreshing: keep using the old one.
   const refreshToken = typeof j.refresh_token === 'string' ? j.refresh_token : prev;
   if (!refreshToken) throw new AuthError('exchange', 'no refresh token received');
-  return { accessToken: j.access_token, refreshToken, expiresAt: now + j.expires_in * 1000 };
+  return { accessToken: j.access_token, refreshToken, expiresAt: now + j.expires_in * 1000, ...(typeof j.scope === 'string' && j.scope ? { scope: j.scope } : {}) };
 }
 
 /** Call with the URL Spotify redirected back to. Throws AuthError (never leaks codes or tokens into the message). */

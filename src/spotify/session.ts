@@ -1,9 +1,9 @@
-import { AuthError, beginLogin, clearTokens, completeLogin, loadTokens, refreshTokens, saveTokens, webStore, type KeyValueStore, type TokenSet } from './auth';
-import { fetchCurrentlyPlaying } from './client';
-import { nextPollDelay, type NowPlaying, type PollResult } from './model';
+import { AuthError, CONTROL_SCOPE, beginLogin, clearTokens, completeLogin, hasScope, loadTokens, refreshTokens, saveTokens, webStore, type KeyValueStore, type TokenSet } from './auth';
+import { fetchCurrentlyPlaying, sendCommand, type Command } from './client';
+import { nextPollDelay, progressAt, type NowPlaying, type PollResult } from './model';
 
 export type SpotifyStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
-export interface SessionState { status: SpotifyStatus; nowPlaying: NowPlaying | null; error?: string }
+export interface SessionState { status: SpotifyStatus; nowPlaying: NowPlaying | null; error?: string; /** Why the last control did not work. Cleared by the next poll. */ controlError?: string }
 
 export interface SessionOptions {
   clientId: string;
@@ -30,6 +30,10 @@ export const MESSAGES = {
   forbidden: 'Dit Spotify-account heeft geen toegang tot de app. In ontwikkelmodus werkt hij voor maximaal 5 gebruikers die op de lijst staan, en de eigenaar heeft Premium nodig.',
   offline: 'Spotify is niet bereikbaar. Dashy probeert het straks opnieuw.',
   redirect: 'De terugkeer-URL is niet toegestaan door Spotify (https, of http://127.0.0.1, niet localhost).',
+  reconnect: 'Koppel Spotify opnieuw om te kunnen bedienen.',
+  premium: 'Bedienen werkt alleen met Spotify Premium.',
+  noDevice: 'Geen actief apparaat: start Spotify op een apparaat.',
+  controlFailed: 'Bedienen lukte niet. Probeer het zo nog eens.',
 } as const;
 
 /**
@@ -56,7 +60,7 @@ export function createSpotifySession(o: SessionOptions) {
     return refreshing ??= (async () => {
       try {
         const t = await refreshTokens({ clientId: o.clientId, refreshToken: tok!.refreshToken, fetch: f, now: now() });
-        tok = t; saveTokens(tokens, t); return t;
+        tok = { ...t, ...(t.scope ?? tok!.scope ? { scope: t.scope ?? tok!.scope } : {}) }; saveTokens(tokens, tok); return tok;
       } catch (e) {
         if (e instanceof AuthError && e.reason === 'expired') { clearTokens(tokens); tok = null; return null; }
         throw e; // network trouble: keep the token, try again later
@@ -133,6 +137,25 @@ export function createSpotifySession(o: SessionOptions) {
       } catch (e) {
         set({ status: 'error', nowPlaying: null, error: e instanceof AuthError && e.reason === 'redirect' ? MESSAGES.redirect : MESSAGES.login });
       }
+    },
+    /** Can this login control playback? False for logins made before the controls existed: they have to connect again. */
+    canControl: () => hasScope(tok, CONTROL_SCOPE),
+    needsReconnect: () => !!tok && !hasScope(tok, CONTROL_SCOPE),
+    /** Previous, play, pause, next. Play and pause show at once; Spotify's answer follows within a second. Resolves to whether it worked. */
+    async control(cmd: Command): Promise<boolean> {
+      const fail = (msg: string) => { const { controlError: _x, ...rest } = state; void _x; set({ ...rest, controlError: msg }); return false; };
+      if (!tok) return false;
+      if (!hasScope(tok, CONTROL_SCOPE)) return fail(MESSAGES.reconnect);
+      try {
+        if (tok.expiresAt - now() < 60_000 && !(await refresh())) { set({ status: 'disconnected', nowPlaying: null }); return false; }
+        let r = await sendCommand({ accessToken: tok.accessToken, command: cmd, fetch: f });
+        if (r.kind === 'unauthorized') { const t = await refresh(); if (!t) { set({ status: 'disconnected', nowPlaying: null }); return false; } r = await sendCommand({ accessToken: t.accessToken, command: cmd, fetch: f }); }
+        if (r.kind !== 'ok') return fail(r.kind === 'premium' ? MESSAGES.premium : r.kind === 'no-device' ? MESSAGES.noDevice : r.kind === 'forbidden' ? MESSAGES.reconnect : MESSAGES.controlFailed);
+        const np = state.nowPlaying;
+        if (np && (cmd === 'play' || cmd === 'pause')) { const { controlError: _x, ...rest } = state; void _x; set({ ...rest, nowPlaying: { ...np, playing: cmd === 'play', progressMs: progressAt(np, now()), fetchedAt: now() } }); }
+        if (running) { clearT(timer); timer = setT(() => { void poll(); }, cmd === 'next' || cmd === 'previous' ? 600 : 900); } // ask Spotify what is really playing now
+        return true;
+      } catch { return fail(MESSAGES.controlFailed); }
     },
     disconnect() { clearTokens(tokens); tok = null; clearT(timer); errors = 0; set({ status: 'disconnected', nowPlaying: null }); },
   };

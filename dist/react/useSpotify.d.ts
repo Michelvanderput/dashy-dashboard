@@ -1,4 +1,5 @@
 import { createSpotifySession, type SessionOptions, type SessionState } from '../spotify/session';
+import type { Command } from '../spotify/client';
 export interface UseSpotifyOptions extends Pick<SessionOptions, 'clientId' | 'redirectUri'> {
     session?: ReturnType<typeof createSpotifySession>;
 }
@@ -6,7 +7,12 @@ export interface UseSpotifyOptions extends Pick<SessionOptions, 'clientId' | 're
  * Spotify connection for React: { status, nowPlaying, error, connect, disconnect }.
  * Pass the result straight to <NowPlayingBlock />. Handles the return from Spotify, token refresh and polling.
  */
-export declare function useSpotify(o: UseSpotifyOptions): SessionState & {
+export interface SpotifyControls {
+    control: (c: Command) => Promise<boolean>;
+    canControl: boolean; /** The saved login predates the controls: connecting again adds them. */
+    needsReconnect: boolean;
+}
+export declare function useSpotify(o: UseSpotifyOptions): SessionState & SpotifyControls & {
     connect: () => void;
     disconnect: () => void;
 };

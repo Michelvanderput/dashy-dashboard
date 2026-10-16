@@ -2,6 +2,7 @@ import { type CSSProperties } from 'react';
 import { type Resolution } from '../driver';
 import { type NowPlaying } from '../spotify/model';
 import type { SpotifyStatus } from '../spotify/session';
+import type { Command } from '../spotify/client';
 export interface NowPlayingBlockProps {
     /**
      * URL of the official Spotify logo (full logo, icon + wordmark, at least 70 px wide). Spotify requires its logo next to
@@ -20,6 +21,14 @@ export interface NowPlayingBlockProps {
     bare?: boolean;
     /** Show Dashy dancing next to the record. Default true. Turn off when Dashy lives in a block of his own. */
     showDashy?: boolean;
+    /** Previous, play, pause, next. Pass it (with `canControl`) to show the controls. Resolves to whether it worked. */
+    onControl?: (c: Command) => Promise<boolean> | void;
+    /** The login may control playback. false/undefined: no controls. */
+    canControl?: boolean;
+    /** The saved login predates the controls: show a small "connect again" instead of them (uses onConnect). */
+    needsReconnect?: boolean;
+    /** Why the last control did not work (shown quietly under the controls). */
+    controlError?: string;
     /** Message to show with status "error". */
     error?: string;
     className?: string;
@@ -30,4 +39,4 @@ export interface NowPlayingBlockProps {
  * dances next to it (his motion comes from core.ts, not from this component). Spotify's rules for the cover are followed:
  * shown whole and unaltered (not cropped, covered or animated), 4 px corners (8 px from 300 px up), and a link back to Spotify. The record colour is picked per album from a fixed palette; the cover is never used on the label.
  */
-export declare function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, driver, size, bare, showDashy, error, className, style }: NowPlayingBlockProps): import("react").JSX.Element;
+export declare function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, onControl, canControl, needsReconnect, controlError, driver, size, bare, showDashy, error, className, style }: NowPlayingBlockProps): import("react").JSX.Element;

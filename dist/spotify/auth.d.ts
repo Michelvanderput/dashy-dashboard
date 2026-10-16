@@ -2,12 +2,16 @@
  * Spotify Authorization Code flow with PKCE: no client secret, so it is safe to run inside a web or desktop app.
  * Everything that touches the outside (storage, network, navigation, time) is passed in, so it can be tested.
  */
-export declare const SCOPES: readonly ['user-read-currently-playing'];
+export declare const CONTROL_SCOPE = "user-modify-playback-state";
+export declare const SCOPES: readonly ['user-read-currently-playing', "user-modify-playback-state"];
 export interface TokenSet {
     accessToken: string;
     refreshToken: string; /** ms epoch */
-    expiresAt: number;
+    expiresAt: number; /** scopes Spotify granted (space separated). Missing on tokens saved before controls existed. */
+    scope?: string;
 }
+/** Did the login include this scope? Old saved logins did not, so they have to log in again to get the controls. */
+export declare const hasScope: (t: Pick<TokenSet, 'scope'> | null, scope: string) => boolean;
 export interface KeyValueStore {
     get(key: string): string | null;
     set(key: string, value: string): void;
