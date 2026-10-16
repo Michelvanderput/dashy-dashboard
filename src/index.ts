@@ -1,0 +1,6 @@
+export { createDashy } from './core';
+export type { Dashy, DashyOptions, DashyState, EyeGeometry, Geometry, Mood, Shape, Status } from './core';
+export { mountDashy } from './svg';
+export type { DashyHandle, MountOptions } from './svg';
+export { DEFAULT_CONFIG, RULES, initialDriverState, nextWakeAt, reduce, resolve } from './driver';
+export type { DriverConfig, DriverEvent, DriverState, Resolution, RuleName } from './driver';
