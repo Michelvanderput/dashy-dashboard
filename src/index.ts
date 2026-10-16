@@ -24,3 +24,5 @@ export { adoptPastedLink, adoptTasksHash, forgetTasksConnection, loadTasksConnec
 export type { TasksConnection } from './tasks-connection';
 export { TURNTABLE_LABEL, levelToMeter, roomList, turntableMood } from './turntable';
 export type { TurntableMood } from './turntable';
+export { SOON_MS, appointmentView, dayProgress, duration, positionOnDay } from './day';
+export type { AppointmentView, DayPhase, DayProgress, Workday } from './day';

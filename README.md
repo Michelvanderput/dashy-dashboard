@@ -150,6 +150,16 @@ Sluit je platenspeler (met ingebouwde voorversterker) met een aux-kabel aan op j
 - Het uitlezen van de muis over het hele scherm vraagt geen extra toestemming van macOS.
 - Getest: de Rust-code (19 tests, inclusief een echte MP3-stream en een nagebootste Sonos die de hele groep- en pauzevolgorde controleert) en de webpagina's in een browser. **Niet** getest: het venster zelf, echt geluid van een platenspeler en echte Sonos-speakers; dat kan hier niet. Loop je ergens tegenaan, meld het dan.
 
+## Afspraak en dagbalk op het scherm
+
+Onder Dashy staat je dag in één oogopslag (`src/day.ts`, `DayPanel`):
+
+- **Volgende afspraak** met een aftelling ("over 25 min · 10:25"). Onder de 10 minuten krijgt hij een oranje rand en staat er ook "(bijna)" in woorden, dus het hangt niet alleen van kleur af. Tijdens de afspraak staat er "Nu" en hoe lang nog. Zonder eindtijd is hij voorbij zodra hij begint. Een afspraak van een andere dag staat met de dag erbij ("morgen 09:00").
+- **Dagbalk:** hoever je bent in je werkdag, met een streepje waar je afspraak valt en "Nog 3 u 20 min tot 17:00". Voor werktijd staat er "Werkdag begint om 08:30", erna "Werkdag voorbij". Geen percentages in beeld, geen "achter op schema", en op een vrije dag (zaterdag en zondag) niets.
+- **Dashy en de afspraak:** hij wordt streng in het half uur voor een afspraak, nooit boos, en is daarna weer rustig (de afspraak telt mee als een taak met een tijdstip).
+
+De afspraak zet je via Claude met de tool `appointment`. De werkdag stel je in met `DASHY_WORKDAY=09:00-17:30` in Vercel (standaard 08:30-17:00, maandag tot en met vrijdag); een ongeldige waarde geeft de standaard.
+
 ## Aansturen vanuit je app
 
 Jouw app vertaalt gebeurtenissen naar een toestand. Voorbeeld:

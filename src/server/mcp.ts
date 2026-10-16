@@ -7,6 +7,7 @@ import { addTasks, dashboard, reorderTasks, setAppointment, setDone, updateTasks
 import { authorized, tokenOf } from './auth.js';
 import { InputError, BATCH_MAX, CATEGORIES, NOTE_MAX, TITLE_MAX } from './model.js';
 import type { Store } from './store.js';
+import type { WorkdayConfig } from './plan.js';
 
 export const INSTRUCTIONS = `Dashy is het werkscherm van de gebruiker: één ding tegelijk, met een kleine buddy. Alles gaat via deze tools. Id's zijn 8 tekens.
 Braindump verwerken: 1) haal eerst het dashboard op (voorkomt dubbelen; "today" is de datum van vandaag, "tz" de tijdzone). 2) Maak per taak een korte title (max ${TITLE_MAX} tekens, begint met een werkwoord, liefst 2 tot 5 woorden) zonder tijd, datum of uitleg erin. Het moment gaat in due, details in note (max ${NOTE_MAX}). Voorbeeld: niet "Morgenavond rond 18:00 naar oma (fiets meenemen!)" maar title "Naar oma", due "<morgen> 18:00", note "Fiets meenemen". 3) due is Nederlandse tijd: "YYYY-MM-DD HH:mm", of alleen "YYYY-MM-DD" als alleen de dag bekend is (dan staat er geen tijd en komt de taak die ochtend aan de beurt), of "HH:mm" voor vandaag. Geef bij alles wat op een ander moment moet altijd een due, anders staat het meteen onder Nu. Vage tijden voor vandaag omzetten: vanmiddag 14:00, na de lunch 13:00, vanavond 19:00. 4) Een taak met een tijdstip staat onder Straks en komt pas een uur ervoor onder Nu. 5) category: werk, sport, thuis of prive. 6) Een afspraak van vandaag zet je met appointment, niet als taak. 7) now: true alleen als het eerst moet.
@@ -14,11 +15,11 @@ Dagplanning: kijk naar leftOpen (taken van een eerdere dag die nog openstaan). B
 Toon: Nederlands, rustig, warm, concreet. Geen schuld, geen cijfers of streaks, hooguit twee korte zinnen met één concrete stap.`;
 
 const str = (extra: object = {}) => ({ type: 'string', ...extra });
-const TOOLS: Record<string, { description: string; inputSchema: object; run: (s: Store, a: unknown, now: number) => Promise<unknown> }> = {
+const TOOLS: Record<string, { description: string; inputSchema: object; run: (s: Store, a: unknown, now: number, workday?: WorkdayConfig) => Promise<unknown> }> = {
   dashboard: {
-    description: 'Open taken in volgorde (state "now" = Nu, "later" = Straks), leftOpen, wat net klaar is, de afspraak. Tijden zijn epoch ms (dueAt) plus hasTime.',
+    description: 'Open taken in volgorde (state "now" = Nu, "later" = Straks), leftOpen, wat net klaar is, de afspraak en de werkdag (workday). Tijden zijn epoch ms (dueAt) plus hasTime.',
     inputSchema: { type: 'object', properties: {} },
-    run: (s, _a, now) => dashboard(s, now),
+    run: (s, _a, now, w) => dashboard(s, now, w),
   },
   add_tasks: {
     description: `Taken toevoegen (achteraan; now:true vooraan). Max ${BATCH_MAX} per keer. due = Nederlandse tijd: "YYYY-MM-DD HH:mm", "YYYY-MM-DD" (alleen de dag) of "HH:mm" (vandaag).`,
@@ -48,7 +49,7 @@ const reply = (id: Rpc['id'], result: unknown) => ({ jsonrpc: '2.0', id: id ?? n
 const fail = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 
-async function one(msg: Rpc, store: Store, now: number): Promise<object | null> {
+async function one(msg: Rpc, store: Store, now: number, workday?: WorkdayConfig): Promise<object | null> {
   if (typeof msg !== 'object' || msg === null || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return fail((msg as Rpc | null)?.id, -32600, 'Invalid Request');
   if (msg.id === undefined) return null; // notification: no reply
   switch (msg.method) {
@@ -62,7 +63,7 @@ async function one(msg: Rpc, store: Store, now: number): Promise<object | null> 
       const name = msg.params?.name, tool = typeof name === 'string' && Object.prototype.hasOwnProperty.call(TOOLS, name) ? TOOLS[name] : null;
       if (!tool) return fail(msg.id, -32602, `Onbekende tool: ${String(name)}`);
       try {
-        const out = await tool.run(store, msg.params?.arguments ?? {}, now);
+        const out = await tool.run(store, msg.params?.arguments ?? {}, now, workday);
         return reply(msg.id, { content: [{ type: 'text', text: JSON.stringify(out) }] });
       } catch (e) {
         // Input mistakes go back to Claude as text so it can fix them; anything else is ours and stays generic.
@@ -75,7 +76,7 @@ async function one(msg: Rpc, store: Store, now: number): Promise<object | null> 
   }
 }
 
-export interface McpDeps { store: Store | null; token: string | undefined; now: () => number; /** accept the token as the last URL segment too */ allowPathToken?: boolean }
+export interface McpDeps { store: Store | null; token: string | undefined; now: () => number; workday?: WorkdayConfig; /** accept the token as the last URL segment too */ allowPathToken?: boolean }
 const MAX_BODY = 64 * 1024;
 
 export async function handleMcp(req: Request, d: McpDeps): Promise<Response> {
@@ -91,14 +92,14 @@ export async function handleMcp(req: Request, d: McpDeps): Promise<Response> {
   const now = d.now();
   if (Array.isArray(body)) {
     if (body.length === 0 || body.length > 20) return json(fail(null, -32600, 'Invalid Request'), 400);
-    const out = (await Promise.all(body.map(m => one(m, d.store!, now)))).filter(x => x !== null);
+    const out = (await Promise.all(body.map(m => one(m, d.store!, now, d.workday)))).filter(x => x !== null);
     return out.length ? json(out) : new Response(null, { status: 202 });
   }
-  const out = await one(body as Rpc, d.store, now);
+  const out = await one(body as Rpc, d.store, now, d.workday);
   return out ? json(out) : new Response(null, { status: 202 });
 }
 
-export interface StateDeps { store: Store | null; token: string | undefined; now: () => number }
+export interface StateDeps { store: Store | null; token: string | undefined; now: () => number; workday?: WorkdayConfig }
 /** Read-only: what the screen polls. A different token than the MCP one, so a screen can never write. */
 export async function handleState(req: Request, d: StateDeps): Promise<Response> {
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization', 'access-control-allow-methods': 'GET, OPTIONS' };
@@ -106,11 +107,11 @@ export async function handleState(req: Request, d: StateDeps): Promise<Response>
   if (req.method !== 'GET') return json({ error: 'method' }, 405, { ...cors, allow: 'GET' });
   if (!d.token || !d.store) return json({ error: 'not-configured' }, 503, cors);
   if (!authorized(tokenOf(req), d.token)) return json({ error: 'unauthorized' }, 401, cors);
-  try { return json(await dashboard(d.store, d.now()), 200, cors); }
+  try { return json(await dashboard(d.store, d.now(), d.workday), 200, cors); }
   catch (e) { console.error('state failed', e); return json({ error: 'storage' }, 502, cors); }
 }
 
-export interface ActionDeps { store: Store | null; token: string | undefined; now: () => number }
+export interface ActionDeps { store: Store | null; token: string | undefined; now: () => number; workday?: WorkdayConfig }
 /**
  * What the screen may write: check a task off or undo it, nothing else. Its own token (not the read token, not the MCP token),
  * so a leaked screen key cannot add, edit or delete tasks. Answers with the fresh state, so the screen shows what the server has.
@@ -130,6 +131,6 @@ export async function handleAction(req: Request, d: ActionDeps): Promise<Respons
   try {
     const now = d.now();
     if (!(await setDone(d.store, b.id, b.action === 'done', now))) return json({ error: 'unknown-task' }, 404, cors);
-    return json(await dashboard(d.store, now), 200, cors);
+    return json(await dashboard(d.store, now, d.workday), 200, cors);
   } catch (e) { console.error('action failed', e); return json({ error: 'storage' }, 502, cors); }
 }

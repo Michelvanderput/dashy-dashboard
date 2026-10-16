@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dashy, NowPlayingBlock, useDashyTasks, useSpotify } from '../src/react';
+import { DayPanel, Dashy, NowPlayingBlock, useDashyTasks, useSpotify } from '../src/react';
 import { nowTask, type DashyState } from '../src';
 
 import { initialConnection } from './storage';
@@ -24,6 +24,7 @@ export function App() {
       <section aria-labelledby="av" style={{ display: 'grid', placeItems: 'center', minHeight: 0 }}>
         <h2 id="av" className="sr">Avatar</h2>
         <div style={{ width: '100%', maxWidth: '30rem', aspectRatio: '1' }}><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
+        {tasks.connected && tasks.snapshot && <DayPanel appointment={tasks.snapshot.appointment} workday={tasks.snapshot.workday} style={{ marginTop: 14 }} />}
         {tasks.connected ? (
           <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: '.95rem' }}>
             {now ? <>Nu: <strong>{now.title}</strong>{now.when && <span style={{ opacity: .6 }}> · {now.when}</span>}</> : 'Niets open. Rust maar.'}

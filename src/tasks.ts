@@ -10,7 +10,16 @@ import type { DriverConfig, DriverEvent } from './driver';
 import { addDays, localParts } from './server/time';
 
 export interface DashTask { id: string; title: string; category: string; /** ms since epoch, only when the task has a time of day */ due: number | null; /** the text as shown ("morgen 14:00") */ when: string; note: string }
-export interface DashboardSnapshot { today: string; tasks: DashTask[]; leftOpen: string[]; timeTodayMin: number }
+export interface DashboardSnapshot {
+  today: string; tasks: DashTask[]; leftOpen: string[]; timeTodayMin: number;
+  /** The next appointment (epoch ms), or null. */
+  appointment: { title: string; at: number; endsAt: number | null } | null;
+  /** The working day, for the day bar. */
+  workday: { start: string; end: string; days: number[] };
+}
+const DEFAULT_WORKDAY = { start: '08:30', end: '17:00', days: [1, 2, 3, 4, 5] };
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const APPT_ID = '__appointment';
 
 /** Strict (30 min before a deadline), never angry (-1: not even at the exact moment), nothing after the time has passed. */
 export const TASK_DRIVER_CONFIG: Partial<DriverConfig> = { strictWithinMs: 30 * 60_000, angryWithinMs: -1, overdueGraceMs: 0, quietAfterMs: 2 * 60 * 60_000 };
@@ -80,7 +89,7 @@ export function parseDashboard(raw: unknown): DashboardSnapshot {
     return { id: r[0] as string, title: r[1] as string, category: r[2] as string, when: (r[3] as string) ?? '', due: parseWhen((r[3] as string) ?? '', today), note: str(r[4], 400) ? (r[4] as string) : '' };
   });
   const leftOpen = Array.isArray(o.left_open) ? o.left_open.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
-  return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today) };
+  return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today), appointment: null, workday: DEFAULT_WORKDAY };
 }
 
 /** Version 2 (server/plan.ts StateBody): epoch times and an explicit hasTime, nothing to parse out of Dutch text. */
@@ -96,7 +105,13 @@ function parseV2(o: Record<string, unknown>): DashboardSnapshot {
     return { id: t.id as string, title: t.title as string, category: t.category as string, due: dueAt !== null && hasTime ? dueAt : null, when: dueAt === null ? '' : whenLabel(dueAt, hasTime, nowMs), note: str(t.note, 400) ? (t.note as string) : '' };
   });
   const leftOpen = Array.isArray(o.leftOpen) ? o.leftOpen.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
-  return { today, tasks, leftOpen, timeTodayMin: 0 };
+  const a = o.appointment as Record<string, unknown> | null | undefined;
+  const appointment = a && typeof a === 'object' && str(a.title, 200) && typeof a.at === 'number' && Number.isFinite(a.at)
+    ? { title: a.title as string, at: a.at, endsAt: typeof a.endsAt === 'number' && Number.isFinite(a.endsAt) && a.endsAt > a.at ? a.endsAt : null } : null;
+  const w = o.workday as Record<string, unknown> | undefined;
+  const workday = w && typeof w.start === 'string' && HHMM.test(w.start) && typeof w.end === 'string' && HHMM.test(w.end) && w.end > w.start && Array.isArray(w.days) && w.days.every(d => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6)
+    ? { start: w.start, end: w.end, days: w.days as number[] } : DEFAULT_WORKDAY;
+  return { today, tasks, leftOpen, timeTodayMin: 0, appointment, workday };
 }
 
 /** What changed between two snapshots, as driver events. `prev` null = first look. */
@@ -111,6 +126,11 @@ export function snapshotEvents(prev: DashboardSnapshot | null, next: DashboardSn
   for (const id of before.keys()) if (!after.has(id)) ev.push({ type: 'taskDone', id });
   const stillOpen = next.leftOpen.length > 0;
   if (stillOpen !== ((prev?.leftOpen.length ?? 0) > 0)) ev.push({ type: 'waiting', value: stillOpen });
+  // an appointment counts like a task with a time: strict shortly before it, calm again after
+  const pa = prev?.appointment ?? null, na = next.appointment;
+  if (na && !pa) ev.push({ type: 'taskAdded', id: APPT_ID, dueAt: na.at });
+  else if (na && pa && pa.at !== na.at) ev.push({ type: 'taskDueChanged', id: APPT_ID, dueAt: na.at });
+  else if (!na && pa) ev.push({ type: 'taskRemoved', id: APPT_ID });
   if (prev && next.timeTodayMin > prev.timeTodayMin) ev.push({ type: 'activity' });
   return ev;
 }

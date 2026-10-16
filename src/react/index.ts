@@ -11,3 +11,5 @@ export { useSpotify } from './useSpotify';
 export type { UseSpotifyOptions } from './useSpotify';
 export { useDashyTasks } from './useDashyTasks';
 export type { DashyTasks, UseDashyTasksOptions } from './useDashyTasks';
+export { DayPanel } from './DayPanel';
+export type { DayPanelProps } from './DayPanel';

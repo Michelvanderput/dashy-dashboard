@@ -1,6 +1,6 @@
 /** The operations on the task list. Validate everything first, then write: a batch with one bad item changes nothing. */
 import { BATCH_MAX, TITLE_MAX, checkCategory, checkNote, checkTitle, InputError, newId, parseDue, type Task } from './model.js';
-import { buildState, type Appointment, type StateBody } from './plan.js';
+import { buildState, type Appointment, type StateBody, type WorkdayConfig } from './plan.js';
 import type { Store } from './store.js';
 
 const DONE_KEEP_MS = 3 * 24 * 3600_000;
@@ -16,9 +16,9 @@ async function prune(store: Store, all: Task[], now: number) {
   if (old.length) await store.deleteTasks(old);
 }
 
-export async function dashboard(store: Store, now: number): Promise<StateBody> {
+export async function dashboard(store: Store, now: number, workday?: WorkdayConfig): Promise<StateBody> {
   const [all, appt] = await Promise.all([store.tasks(), store.appointment()]);
-  return buildState(all, appt, now);
+  return buildState(all, appt, now, undefined, workday);
 }
 
 export async function addTasks(store: Store, input: unknown, now: number): Promise<{ added: { id: string; title: string }[] }> {

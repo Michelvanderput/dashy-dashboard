@@ -1,4 +1,5 @@
 import { MemoryStore, SupabaseStore, UpstashStore, type Store } from './store.js';
+import { parseWorkday, type WorkdayConfig } from './plan.js';
 /** The store for this deployment: Supabase when SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set, else Upstash Redis, otherwise null (the endpoints then answer 503, they never pretend). */
 let cached: Store | null | undefined;
 export function storeFromEnv(env: Record<string, string | undefined> = process.env): Store | null {
@@ -10,4 +11,6 @@ export function storeFromEnv(env: Record<string, string | undefined> = process.e
   if (env === process.env) cached = s;
   return s;
 }
+/** DASHY_WORKDAY="08:30-17:00": when the working day starts and ends (Mon-Fri). Missing or invalid: 08:30-17:00. */
+export const workdayFromEnv = (env: Record<string, string | undefined> = process.env): WorkdayConfig => parseWorkday(env.DASHY_WORKDAY);
 export { MemoryStore };

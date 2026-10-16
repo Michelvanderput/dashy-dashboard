@@ -30,6 +30,19 @@ export function leftOpen(open: Task[], now: number, tz = TIME_ZONE): Task[] {
 }
 
 export interface Appointment { title: string; at: number; endsAt?: number | null }
+/** The working day: start and end as HH:MM and the weekdays it applies to (0 = Sunday). */
+export interface WorkdayConfig { start: string; end: string; days: number[] }
+export const DEFAULT_WORKDAY: WorkdayConfig = { start: '08:30', end: '17:00', days: [1, 2, 3, 4, 5] };
+
+/** "08:30-17:00" (optionally "08:30-17:00 ma-vr" is not needed: weekdays only). Anything invalid gives the default, never a crash. */
+export function parseWorkday(text: string | undefined): WorkdayConfig {
+  const m = /^\s*([01]?\d|2[0-3]):([0-5]\d)\s*-\s*([01]?\d|2[0-3]):([0-5]\d)\s*$/.exec(text ?? '');
+  if (!m) return DEFAULT_WORKDAY;
+  const [a, b] = [+m[1] * 60 + +m[2], +m[3] * 60 + +m[4]];
+  if (b <= a) return DEFAULT_WORKDAY;
+  const hh = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  return { start: hh(a), end: hh(b), days: DEFAULT_WORKDAY.days };
+}
 /** Version 2 of the state body: what the screen and Claude both read. Epoch times, no Dutch text to parse. */
 export interface StateBody {
   v: 2; today: string; weekday: number; now: number; tz: string;
@@ -38,8 +51,9 @@ export interface StateBody {
   /** Done in the last 24 h, newest first, so the screen can celebrate by itself. */
   recentlyDone: { id: string; title: string; doneAt: number }[];
   appointment: Appointment | null;
+  workday: WorkdayConfig;
 }
-export function buildState(all: Task[], appointment: Appointment | null, now: number, tz = TIME_ZONE): StateBody {
+export function buildState(all: Task[], appointment: Appointment | null, now: number, tz = TIME_ZONE, workday: WorkdayConfig = DEFAULT_WORKDAY): StateBody {
   const open = all.filter(t => !t.done);
   const { ready, planned } = orderTasks(open, now);
   const p = localParts(now, tz);
@@ -50,5 +64,6 @@ export function buildState(all: Task[], appointment: Appointment | null, now: nu
     leftOpen: leftOpen(open, now, tz).map(t => t.id),
     recentlyDone: all.filter(t => t.done && t.doneAt !== null && now - t.doneAt < 24 * 3600_000).sort((a, b) => b.doneAt! - a.doneAt!).slice(0, 20).map(t => ({ id: t.id, title: t.title, doneAt: t.doneAt! })),
     appointment: appointment && (appointment.endsAt ?? appointment.at) > now ? appointment : null,
+    workday,
   };
 }
