@@ -287,4 +287,67 @@ describe('a phone on the charger, and a real day', () => {
     const b = render(<Dashboard {...base({ items: [{ id: 'a', kind: 'task', title: 'X', at: null, done: true }] })} />);
     expect(b.container.querySelector('.db-now')!.textContent).toContain('Alles gedaan.');
   });
+
+  it('"Begin" starts a short session; during it Dashy works along and the timer shows; at the end he asks, never scolds', () => {
+    const onStartSession = vi.fn(), onSessionEnd = vi.fn(), onToggleDone = vi.fn();
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Offerte sturen', at: null }];
+    const { container, rerender } = render(<Dashboard {...base({ items: items2, onStartSession, onSessionEnd, onToggleDone })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Begin 10 minuten aan Offerte sturen' }));
+    expect(onStartSession).toHaveBeenCalledWith({ id: 'a', title: 'Offerte sturen' });
+    const session = { taskId: 'a', title: 'Offerte sturen', startedAt: T0, minutes: 10 };
+    rerender(<Dashboard {...base({ items: items2, session, now: T0 + 5 * MIN + 1000, onStartSession, onSessionEnd, onToggleDone })} />);
+    expect(container.querySelector('.db-timer')!.textContent).toBe('4:59');
+    expect(container.querySelector('.db-line')!.textContent).toBe('Ik werk met je mee.');
+    expect(dashyLabel(container)).toBe('Dashy is aan het werk');
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' })); expect(onSessionEnd).toHaveBeenCalledWith('stop');
+    rerender(<Dashboard {...base({ items: items2, session, now: T0 + 10 * MIN + 1, onStartSession, onSessionEnd, onToggleDone })} />);
+    expect(container.querySelector('.db-line')!.textContent).toBe('Tijd om. Offerte sturen: klaar, of nog 10 minuten?');
+    fireEvent.click(screen.getByRole('button', { name: 'Nog 10 min' })); expect(onSessionEnd).toHaveBeenCalledWith('more');
+    fireEvent.click(within(container.querySelector('.db-now') as HTMLElement).getByRole('button', { name: 'Offerte sturen: markeer als klaar' }));
+    expect(onToggleDone).toHaveBeenCalledWith('a', true); expect(onSessionEnd).toHaveBeenCalledWith('done');
+  });
+
+  it('a session on a task that is gone ends by itself; a deadline within 15 minutes on another task still comes first', () => {
+    const onSessionEnd = vi.fn();
+    render(<Dashboard {...base({ items: [], session: { taskId: 'weg', title: 'Weg', startedAt: T0, minutes: 10 }, onSessionEnd })} />);
+    expect(onSessionEnd).toHaveBeenCalledWith('stop'); cleanup();
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Rustig werk', at: null }, { id: 'b', kind: 'task', title: 'Bijna te laat', at: T0 + 5 * MIN }];
+    const { container } = render(<Dashboard {...base({ items: items2, session: { taskId: 'a', title: 'Rustig werk', startedAt: T0, minutes: 10 } })} />);
+    expect(container.querySelector('.db-now .db-what')!.textContent).toBe('Bijna te laat');
+  });
+
+  it('habits show "x van y" without streaks, can be checked, and a quick add creates a task', () => {
+    const onHabit = vi.fn(), onAdd = vi.fn();
+    const habits = [{ id: 'w', title: 'Wandelen', perWeek: 3, plan: 'Als ik koffie zet, dan loop ik 5 minuten.', done: ['2026-10-15'] }];
+    const { container } = render(<Dashboard {...base({ habits, onHabit, onAdd })} />);
+    const li = container.querySelector('.db-habit') as HTMLElement;
+    expect(li.textContent).toContain('1 van 3'); expect(li.textContent).not.toMatch(/streak|reeks|op rij/i);
+    fireEvent.click(within(li).getByRole('checkbox', { name: 'Wandelen: vandaag gedaan' })); expect(onHabit).toHaveBeenCalledWith('w', true);
+    fireEvent.change(screen.getByLabelText('Nieuwe taak'), { target: { value: '  Tandarts bellen ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Toevoegen' })); expect(onAdd).toHaveBeenCalledWith('Tandarts bellen');
+    expect((screen.getByLabelText('Nieuwe taak') as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('button', { name: 'Toevoegen' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('"Even stoppen": a calm dialog with a timer, breathing and something else to do; closing reports only how it ended', () => {
+    const onUrge = vi.fn();
+    render(<Dashboard {...base({ onUrge })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Even stoppen' }));
+    const dlg = screen.getByRole('dialog', { name: 'Even stoppen' });
+    expect(within(dlg).getByRole('timer').textContent).toContain('10:00');
+    expect(dlg.textContent).toMatch(/Doe iets anders/); expect(dlg.textContent).toMatch(/huisarts/);
+    expect(dlg.textContent).not.toMatch(/streak|dagen/i);
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Het gaat voorbij' }));
+    expect(screen.getByRole('dialog').textContent).toContain('Goed gedaan.');
+    fireEvent.click(screen.getByRole('button', { name: 'Terug naar je dag' }));
+    expect(onUrge).toHaveBeenCalledWith('overleefd'); expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Even stoppen' }));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' }); fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(onUrge).toHaveBeenLastCalledWith('gestopt');
+  });
+
+  it('without handlers nothing pretends to work: no add field, no start button, no help button when switched off', () => {
+    render(<Dashboard {...base({ showUrge: false })} />);
+    expect(screen.queryByLabelText('Nieuwe taak')).toBeNull(); expect(screen.queryByRole('button', { name: /^Begin/ })).toBeNull(); expect(screen.queryByRole('button', { name: 'Even stoppen' })).toBeNull();
+  });
 });

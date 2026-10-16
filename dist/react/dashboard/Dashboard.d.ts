@@ -1,5 +1,8 @@
 import { type CSSProperties } from 'react';
 import { type BlockId } from '../../dashboard/layout';
+import { type Habit } from '../../dashboard/habits';
+import { type Session } from '../../dashboard/session';
+import type { UrgeOutcome } from '../../dashboard/urge';
 import { type PlanItem } from '../../dashboard/plan';
 import type { DashyState } from '../../core';
 import type { Resolution } from '../../driver';
@@ -27,6 +30,21 @@ export interface DashboardProps {
     onToggleDone?: (id: string, done: boolean) => void;
     /** The task someone chose to do first (MCP or a tap). It becomes "Nu" unless a deadline is closer. */
     focusTaskId?: string | null;
+    /** The running focus session (one task, a short block of time), or null. Owned by the caller so it survives re-renders. */
+    session?: Session | null;
+    onStartSession?: (task: {
+        id: string;
+        title: string;
+    }) => void;
+    onSessionEnd?: (outcome: 'done' | 'stop' | 'more') => void;
+    /** Habits (no streaks) and checking today. */
+    habits?: Habit[];
+    onHabit?: (id: string, checked: boolean) => void;
+    /** Quick add of a task by title. Without it the plan has no input. */
+    onAdd?: (title: string) => void;
+    /** "Even stoppen" sheet. Called when it closes, with how it ended (never with content). Default: the button is shown. */
+    onUrge?: (outcome: UrgeOutcome) => void;
+    showUrge?: boolean;
     /** Text for an empty planning. Default: "Een lege dag. Voeg iets kleins toe." */
     emptyText?: string;
     /** Dark and dimmed (for the night, a phone on the charger). */
@@ -48,4 +66,4 @@ export interface DashboardProps {
  * (a deadline, an appointment, Dashy asking for help, new music) the grid tracks grow so that block takes about half the
  * screen, animated by the browser itself; the content simply reflows. Tap a block's button to grow it yourself (Esc lets go).
  */
-export declare function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, emptyText, night, keepAwake, workday, onFocusChange, className, style }: DashboardProps): import("react").JSX.Element;
+export declare function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, session, onStartSession, onSessionEnd, habits, onHabit, onAdd, onUrge, showUrge, emptyText, night, keepAwake, workday, onFocusChange, className, style }: DashboardProps): import("react").JSX.Element;

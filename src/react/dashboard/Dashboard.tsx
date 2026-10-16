@@ -3,6 +3,10 @@ import { chooseAttention } from '../../dashboard/attention';
 import { aimAt } from '../../dashboard/aim';
 import { BLOCKS, tracksFor, type BlockId } from '../../dashboard/layout';
 import { dashyLine } from '../../dashboard/lines';
+import { doneToday, habitToNudge, weekCount, type Habit } from '../../dashboard/habits';
+import { isOver, remainingMs, timerLabel, timerSpoken, MORE_MINUTES, SESSION_MINUTES, type Session } from '../../dashboard/session';
+import type { UrgeOutcome } from '../../dashboard/urge';
+import { UrgeSheet } from './UrgeSheet';
 import { clock, countdown, nextAppointmentAt, nextUp, nowTask, planOrder, pressingTask, urgency, type PlanItem } from '../../dashboard/plan';
 import type { DashyState } from '../../core';
 import type { Resolution } from '../../driver';
@@ -28,6 +32,18 @@ export interface DashboardProps {
   onToggleDone?: (id: string, done: boolean) => void;
   /** The task someone chose to do first (MCP or a tap). It becomes "Nu" unless a deadline is closer. */
   focusTaskId?: string | null;
+  /** The running focus session (one task, a short block of time), or null. Owned by the caller so it survives re-renders. */
+  session?: Session | null;
+  onStartSession?: (task: { id: string; title: string }) => void;
+  onSessionEnd?: (outcome: 'done' | 'stop' | 'more') => void;
+  /** Habits (no streaks) and checking today. */
+  habits?: Habit[];
+  onHabit?: (id: string, checked: boolean) => void;
+  /** Quick add of a task by title. Without it the plan has no input. */
+  onAdd?: (title: string) => void;
+  /** "Even stoppen" sheet. Called when it closes, with how it ended (never with content). Default: the button is shown. */
+  onUrge?: (outcome: UrgeOutcome) => void;
+  showUrge?: boolean;
   /** Text for an empty planning. Default: "Een lege dag. Voeg iets kleins toe." */
   emptyText?: string;
   /** Dark and dimmed (for the night, a phone on the charger). */
@@ -54,7 +70,7 @@ const Chevrons = () => (
  * in his face: the eyes look around, blink and take his mood, and the face moves, tilts and squashes inside the block (never
  * outside it). He looks at the block that needs attention; a tap on him startles him.
  */
-function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why }: { state: DashyState; focus: boolean; attn: boolean; onToggle: (b: BlockId) => void; lookAt: BlockId | null; rootRef: RefObject<HTMLElement | null>; say: string; why: string }) {
+function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why, onHelp }: { onHelp?: () => void; state: DashyState; focus: boolean; attn: boolean; onToggle: (b: BlockId) => void; lookAt: BlockId | null; rootRef: RefObject<HTMLElement | null>; say: string; why: string }) {
   const section = useRef<HTMLElement>(null), face = useRef<HTMLDivElement>(null);
   const { look } = useDashyBody(face, state);
   useEffect(() => {
@@ -74,6 +90,7 @@ function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why }: 
       <h2 className="db-sr" id="db-title-dashy">{TITLES.dashy}</h2>
       <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES.dashy}` : `Vergroot ${TITLES.dashy}`} onClick={() => onToggle('dashy')}><Chevrons /></button>
       <div className="db-body"><div className="db-say"><p className="db-line">{say}</p><p className="db-why">{why}</p></div></div>
+      {onHelp && <button type="button" className="db-help" onClick={onHelp}>Even stoppen</button>}
     </section>
   );
 }
@@ -97,7 +114,7 @@ function Block({ id, focus, attn, onToggle, children }: { id: BlockId; focus: bo
  * (a deadline, an appointment, Dashy asking for help, new music) the grid tracks grow so that block takes about half the
  * screen, animated by the browser itself; the content simply reflows. Tap a block's button to grow it yourself (Esc lets go).
  */
-export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
+export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, session = null, onStartSession, onSessionEnd, habits = [], onHabit, onAdd, onUrge, showUrge = true, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
   const root = useRef<HTMLElement>(null);
   const orientation = useOrientation(root);
 
@@ -110,7 +127,11 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   const plan = useMemo(() => planOrder(items, now), [items, now]);
   const next = nextUp(items, now);
   const late = plan.find(i => i.kind === 'task' && !i.done && urgency(i, now) === 'late') ?? null; // open, long past its deadline: named, never blamed
-  const pick = nowTask(items, now, focusTaskId);
+  const picked = nowTask(items, now, focusTaskId);
+  // While you are working on a task it stays "Nu", unless a deadline on another task is within 15 minutes.
+  const working = session ? items.find(i => i.id === session.taskId && !i.done) : undefined;
+  const pick = working && picked?.why !== 'deadline-near' ? { item: working, reason: 'Je bent bezig', why: 'chosen' as const } : picked;
+  useEffect(() => { if (session && !working) onSessionEnd?.('stop'); }, [session, working]); // eslint-disable-line react-hooks/exhaustive-deps
   const after = nextUp(items.filter(i => i.id !== pick?.item.id), now);
   const stale = late;
   const candidate = chooseAttention({ now, resolution, nextEventAt: nextAppointmentAt(items, now), musicSince });
@@ -125,10 +146,16 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
 
   const t = tracksFor(orientation, focus.block);
   const nextIn = next ? countdown(next.at - now) : undefined;
-  const dashyState = state ?? musicState(resolution, playing);
+  const calm = resolution.rule === 'idle' || resolution.rule === 'quiet' || resolution.rule === 'working';
+  const sessionOn = !!session && calm;
+  const sessionOver = !!session && isOver(session, now);
+  const dashyState = state ?? (sessionOn ? 'working' : musicState(resolution, playing));
+  const [urgeOpen, setUrgeOpen] = useState(false);
+  const nudge = habitToNudge(habits, now);
   const press = pressingTask(items, now);
-  const dashyText = line ?? dashyLine(resolution, {
+  const dashyText = line ?? (sessionOn ? (sessionOver ? `Tijd om. ${session!.title}: klaar, of nog ${MORE_MINUTES} minuten?` : 'Ik werk met je mee.') : null) ?? dashyLine(resolution, {
     task: press ? { title: press.title, in: countdown(press.at! - now), overdue: press.at! < now - 60_000, at: clock(press.at!) } : undefined,
+    habit: nudge ? { title: nudge.title, plan: nudge.plan } : undefined,
     nowTitle: pick?.item.title, nextTitle: next?.item.title, nextIn, stale: late?.title, music: playing ? np!.title : undefined,
   });
 
@@ -151,7 +178,7 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
       <div className="db-sr" role="status" aria-live="polite">{announce}</div>
 
       {BLOCKS.map(id => id === 'dashy' ? (
-        <BodyBlock key={id} state={dashyState} focus={focus.block === id} attn={attn(id)} onToggle={toggle} lookAt={lookAt} rootRef={root} say={dashyText} why={focus.block === 'dashy' ? focus.reason : ''} />
+        <BodyBlock key={id} state={dashyState} focus={focus.block === id} attn={attn(id)} onToggle={toggle} lookAt={lookAt} rootRef={root} say={dashyText} why={focus.block === 'dashy' ? focus.reason : ''} onHelp={showUrge ? () => setUrgeOpen(true) : undefined} />
       ) : (
         <Block key={id} id={id} focus={focus.block === id} attn={attn(id)} onToggle={toggle}>
           {id === 'now' && (
@@ -160,14 +187,28 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
                 <p className="db-what">{pick.item.title}</p>
                 <p className="db-when">{pick.reason}{pick.item.at !== null && pick.item.at >= now && pick.item.at - now <= 2 * 3600_000 ? ` · over ${countdown(pick.item.at - now)}` : ''}</p>
                 {pick.item.note && <p className="db-note-now">{pick.item.note}</p>}
-                {pick.item.kind === 'task' && onToggleDone && <button type="button" className="db-done" onClick={() => onToggleDone(pick.item.id, true)} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
+                {session && session.taskId === pick.item.id ? (
+                  <>
+                    <p className="db-timer" role="timer" aria-live="off" aria-label={timerSpoken(remainingMs(session, now))}>{timerLabel(remainingMs(session, now))}</p>
+                    <div className="db-actions">
+                      {onToggleDone && <button type="button" className="db-done" onClick={() => { onToggleDone(pick.item.id, true); onSessionEnd?.('done'); }} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
+                      {sessionOver && <button type="button" className="db-done ghost" onClick={() => onSessionEnd?.('more')}>Nog {MORE_MINUTES} min</button>}
+                      <button type="button" className="db-done ghost" onClick={() => onSessionEnd?.('stop')}>Stop</button>
+                    </div>
+                  </>
+                ) : pick.item.kind === 'task' && (
+                  <div className="db-actions">
+                    {onStartSession && <button type="button" className="db-done" onClick={() => onStartSession({ id: pick.item.id, title: pick.item.title })} aria-label={`Begin ${SESSION_MINUTES} minuten aan ${pick.item.title}`}>Begin ({SESSION_MINUTES} min)</button>}
+                    {onToggleDone && <button type="button" className={onStartSession ? 'db-done ghost' : 'db-done'} onClick={() => onToggleDone(pick.item.id, true)} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
+                  </div>
+                )}
                 {after && <p className="db-after">Straks: {clock(after.at)} · {after.item.title}</p>}
               </>) : items.some(i => i.kind === 'task' && i.done) ? <p className="db-empty">Alles gedaan.</p> : <p className="db-empty">Niets te doen.</p>}
               <p className="db-why">{focus.block === 'now' ? focus.reason : ''}</p>
             </div>
           )}
           {id === 'plan' && (
-            <>
+            <div className="db-planwrap">
               <ul className="db-plan" aria-label="Planning van vandaag">
                 {plan.length === 0 && <li className="db-empty">{emptyText}</li>}
                 {plan.map(i => (
@@ -181,7 +222,20 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
                   </li>
                 ))}
               </ul>
-            </>
+              {habits.length > 0 && (
+                <ul className="db-habits" aria-label="Gewoontes deze week">
+                  {habits.map(h => (
+                    <li key={h.id} className="db-item db-habit" data-met={weekCount(h, now) >= h.perWeek}>
+                      <button type="button" className="db-check" role="checkbox" aria-checked={doneToday(h, now)} disabled={!onHabit} aria-label={`${h.title}: vandaag ${doneToday(h, now) ? 'niet gedaan' : 'gedaan'}`} onClick={() => onHabit?.(h.id, !doneToday(h, now))}><i /></button>
+                      <span className="db-name">{h.title}</span>
+                      <span className="db-time">{weekCount(h, now)} van {h.perWeek}<span className="db-sr"> deze week</span></span>
+                      {h.plan && <span className="db-note">{h.plan}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {onAdd && <AddTask onAdd={onAdd} />}
+            </div>
           )}
           {id === 'music' && (
             <div className="db-music">
@@ -198,6 +252,18 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
           )}
         </Block>
       ))}
+      {urgeOpen && <UrgeSheet onClose={o => { setUrgeOpen(false); onUrge?.(o); }} />}
     </main>
+  );
+}
+
+/** One field, one button: a task by title. The deadline can be set by Claude later. */
+function AddTask({ onAdd }: { onAdd: (title: string) => void }) {
+  const [v, setV] = useState('');
+  return (
+    <form className="db-add" onSubmit={e => { e.preventDefault(); const t = v.trim(); if (t) { onAdd(t.slice(0, 80)); setV(''); } }}>
+      <input value={v} onChange={e => setV(e.target.value)} maxLength={80} aria-label="Nieuwe taak" placeholder="Nieuwe taak" enterKeyHint="done" />
+      <button type="submit" disabled={!v.trim()}>Toevoegen</button>
+    </form>
   );
 }

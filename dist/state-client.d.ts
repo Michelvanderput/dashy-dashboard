@@ -1,4 +1,5 @@
 import type { DashyState } from './core';
+import { type Habit } from './dashboard/habits';
 import type { PlanItem } from './dashboard/plan';
 export interface RemoteState {
     state: DashyState;
@@ -9,6 +10,7 @@ export interface RemoteState {
     rule?: string; /** the plan (titles), when the server keeps it */
     items: PlanItem[];
     focusId: string | null;
+    habits: Habit[];
 }
 export interface StateClientOptions {
     url: string;
@@ -21,13 +23,14 @@ export declare const CALM: RemoteState;
 export declare function parseRemoteState(raw: unknown): RemoteState;
 /** Never throws, never hangs: any error, timeout, bad status or invalid body gives the calm fallback (idle, no text). */
 export declare function fetchDashyState(o: StateClientOptions): Promise<RemoteState>;
-export type ActionKind = 'done' | 'undo';
+export type ActionKind = 'done' | 'undo' | 'add' | 'focus' | 'check' | 'uncheck';
 /** Check off (or undo) a task. Resolves to the fresh state, or null when it did not work (the screen then just keeps what it has). */
 export declare function sendAction(o: {
     url: string;
     token: string;
     action: ActionKind;
-    id: string;
+    id?: string | null;
+    title?: string;
     timeoutMs?: number;
     fetch?: typeof fetch;
 }): Promise<RemoteState | null>;

@@ -89,6 +89,7 @@ Claude roept jouw app aan, niet andersom: een remote MCP-server op Vercel (`api/
 |---|---|
 | `dashy_task` | `added` (met korte `title`, optionele `due` en `note`), `done` (Dashy viert), `reopen`, `removed`, `due` (deadline wijzigen of wissen). Het resultaat zegt wat er nu "Nu" staat. |
 | `dashy_appointment` | `added` (id, titel, start, optioneel einde) of `removed`. Binnen 10 minuten voor de start wordt het "Nu". |
+| `dashy_habit` | gewoonte zonder streaks: `added` (titel, `perWeek` 1-7, optioneel als-dan-`plan`), `check` / `uncheck` (vandaag), `removed`. Het scherm toont alleen "x van y deze week". |
 | `dashy_focus` | kies welke taak als eerste moet (`id`), of `null` om te wissen. Een deadline binnen 15 minuten gaat altijd voor. |
 | `dashy_flag` | `waiting`, `blocked`, `break` (slaperig), `working` aan of uit |
 | `dashy_activity` | "er is iets gedaan": houdt Dashy uit `sad` |
@@ -108,6 +109,16 @@ Het scherm koppelen (één keer per apparaat): open de app met `https://<jouw-ap
 - **Drie geheimen:** `DASHY_MCP_TOKEN` (Claude, schrijven), `DASHY_STATE_TOKEN` (scherm, alleen lezen) en `DASHY_ACTION_TOKEN` (scherm, alleen taken afvinken of terugzetten). Elk werkt alleen op het eigen eindpunt. Het MCP-token kan ook als `?key=` in de URL, voor connectors zonder headers. URL's komen in logs, dus gebruik de header waar het kan.
 - **Zonder Redis of token** doet niets iets: de eindpunten geven 503 en een rustige Dashy.
 - **Twee schrijfacties binnen enkele milliseconden** kunnen elkaar overschrijven (laatste wint). Voor één persoon met één Claude is dat acceptabel.
+
+## Buddy-functies (onderzoeksgedreven)
+
+Zie `docs/RESEARCH.md` voor onderzoek, bronnen en wat het bewijs wel en niet zegt.
+
+- **Begin (10 min):** korte sessie op de taak in "Nu", met zichtbare tijd; Dashy werkt mee. Aan het eind: "klaar, of nog 10 minuten?" (nooit een verwijt).
+- **Gewoontes** zonder streaks, met als-dan-plan, in het blok Planning. Afvinken kan op het scherm (met het actie-token), Claude zet ze op.
+- **Snel toevoegen** in Planning (alleen een titel; Claude kan er later een tijd aan hangen).
+- **Even stoppen** (knop bij Dashy): 10 minuten uitstel, ademcirkel, een andere activiteit. Geen vragen, geen teller. Hoe het afliep blijft alleen op het apparaat. Geen medische hulp.
+- Het actie-eindpunt kan alleen: taak afvinken/terugzetten, taak toevoegen (titel), taak kiezen, gewoonte van vandaag afvinken. Niets anders.
 
 ## Spotify-blok
 

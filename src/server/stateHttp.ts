@@ -1,4 +1,5 @@
 import { authorized, fingerprint, tokenFrom } from './auth';
+import type { Habit } from '../dashboard/habits';
 import type { PlanItem } from '../dashboard/plan';
 import { planOf, read, view, type Doc, type Store } from './dashyStore';
 
@@ -11,12 +12,12 @@ export interface StateHttpDeps {
   log?: (msg: string) => void;
 }
 
-export interface StateBody { state: string; line: string; source: 'driver' | 'claude' | 'fallback'; rule: string; nextWakeAt: number | null; rev: number; at: number; items: PlanItem[]; focusId: string | null }
-const calm = (at: number): StateBody => ({ state: 'idle', line: '', source: 'fallback', rule: 'idle', nextWakeAt: null, rev: 0, at, items: [], focusId: null });
+export interface StateBody { state: string; line: string; source: 'driver' | 'claude' | 'fallback'; rule: string; nextWakeAt: number | null; rev: number; at: number; items: PlanItem[]; focusId: string | null; habits: Habit[] }
+const calm = (at: number): StateBody => ({ state: 'idle', line: '', source: 'fallback', rule: 'idle', nextWakeAt: null, rev: 0, at, items: [], focusId: null, habits: [] });
 /** What the screen needs from the document: the state to show, and the plan. */
 export function buildStateBody(doc: Doc, now: number): StateBody {
   const v = view(doc, now);
-  return { state: v.state, line: v.line, source: v.source, rule: v.rule, nextWakeAt: v.nextWakeAt, rev: v.rev, at: now, items: planOf(doc), focusId: doc.focusId };
+  return { state: v.state, line: v.line, source: v.source, rule: v.rule, nextWakeAt: v.nextWakeAt, rev: v.rev, at: now, items: planOf(doc), focusId: doc.focusId, habits: Object.values(doc.habits) };
 }
 export const reply = (status: number, b: StateBody, reason?: string) =>
   new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...(reason ? { 'x-dashy-reason': reason } : {}) } });

@@ -101,5 +101,43 @@ export const CSS = `
 @container (max-height:140px){.db-music .dnp-time,.db-music .dnp-bar,.db-music .dnp-logo{display:none}}
 @container (max-height:110px){.db-music .dnp-actions .dnp-btn{display:none}}
 
+/* Focus session, habits, quick add */
+.db-actions{display:flex;flex-wrap:wrap;gap:.5em;margin-top:.9em}
+.db-actions .db-done{margin-top:0}
+.db-done.ghost{border-color:var(--floor);color:var(--muted)}
+.db-done.ghost:hover{background:var(--hair);color:var(--ink)}
+.db-timer{margin:.2em 0 0;font-size:clamp(2rem,13cqmin,4.5rem);font-weight:200;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+.db-planwrap{height:100%;display:flex;flex-direction:column;min-height:0}
+.db-planwrap .db-plan{flex:1 1 auto;height:auto;min-height:0}
+.db-habits{margin:.4em 0 0;padding:.4em 0 0;list-style:none;flex:0 1 auto;max-height:45%;overflow:auto;scrollbar-width:none;box-shadow:0 -1px 0 var(--hair)}
+.db-habit[data-met="true"] .db-time{color:var(--ok)}
+.db-add{display:flex;gap:.5em;margin-top:.5em;flex:none}
+.db-add input{flex:1;min-width:0;min-height:44px;padding:0 .9em;border:1px solid var(--floor);border-radius:999px;background:transparent;color:var(--ink);font:inherit}
+.db-add input:focus-visible,.db-add button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.db-add button{min-height:44px;padding:0 1.1em;border:1px solid var(--ink);border-radius:999px;background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.db-add button:disabled{opacity:.4;cursor:default}
+@container (max-height:230px){.db-add,.db-habits{display:none}}
+@container (max-height:210px){.db-what{-webkit-line-clamp:1}.db-timer{font-size:1.8rem;margin:0}.db-actions{margin-top:.4em;gap:.4em}.db-actions .db-done{padding:.5em 1em}.db-done{margin-top:.4em}}
+.db-help{position:absolute;left:8px;top:6px;z-index:2;min-height:44px;padding:0 1em;border:0;border-radius:999px;background:transparent;color:#66645e;font:inherit;font-size:.85em;cursor:pointer;opacity:.7;transition:opacity .2s}
+.db-help:hover,.db-help:focus-visible{opacity:1;background:rgba(23,24,26,.06)}
+.db-help:focus-visible{outline:2px solid #17181a;outline-offset:-2px}
+
+/* Even stoppen */
+.db-urge{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;background:var(--bg);color:var(--ink)}
+.db-urge-in{width:min(30rem,100%);display:flex;flex-direction:column;align-items:center;gap:1.1em;text-align:center}
+.db-urge-in h2{margin:0;font-size:.95em;font-weight:500;color:var(--muted);letter-spacing:.02em}
+.db-urge-say{margin:0;font-size:1.35em;line-height:1.35;letter-spacing:-.02em}
+.db-urge-breath{position:relative;width:min(46vmin,14rem);aspect-ratio:1;display:grid;place-items:center}
+.db-urge-breath i{position:absolute;inset:0;border-radius:50%;background:var(--card-hi);box-shadow:inset 0 0 0 1px var(--floor)}
+.db-urge-breath span{position:relative;color:var(--muted)}
+.db-urge-time{margin:0;font-size:2.2em;font-weight:200;font-variant-numeric:tabular-nums}
+.db-urge-tip{margin:0;color:var(--muted);line-height:1.4}
+.db-urge-link{border:0;background:none;color:var(--ink);font:inherit;text-decoration:underline;cursor:pointer;min-height:44px;padding:0 .4em}
+.db-urge-row{display:flex;flex-wrap:wrap;justify-content:center;gap:.6em}
+.db-urge-btn{min-height:48px;padding:0 1.4em;border:1px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--card);font:inherit;font-weight:500;cursor:pointer}
+.db-urge-btn.ghost{background:transparent;color:var(--ink);border-color:var(--floor)}
+.db-urge-btn:focus-visible,.db-urge-link:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.db-urge-foot{margin:0;font-size:.8em;color:var(--muted);line-height:1.4}
+
 @media (prefers-reduced-motion:reduce){.db,.db-block,.db-why,.db-more,.db-note,.db-left,.db-day i{transition:none}}
 `;

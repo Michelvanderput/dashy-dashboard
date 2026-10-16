@@ -7,5 +7,5 @@ export interface ActionHttpDeps {
     allow: (key: string) => Promise<boolean>;
     log?: (msg: string) => void;
 }
-/** POST {action: 'done' | 'undo', id}. Answers with the fresh state body; every error answers with the calm shape. */
+/** POST {action: 'done' | 'undo' | 'add' | 'focus' | 'check' | 'uncheck', id?, title?}. Answers with the fresh state body; every error answers with the calm shape. */
 export declare function handleActionRequest(req: Request, deps: ActionHttpDeps): Promise<Response>;

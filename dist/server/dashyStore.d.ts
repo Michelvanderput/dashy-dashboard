@@ -5,6 +5,7 @@
 import { type AllowedState } from '../advice';
 import type { DashyState } from '../core';
 import { type NowPick, type PlanItem } from '../dashboard/plan';
+import { type Habit } from '../dashboard/habits';
 import { type DriverState, type RuleName } from '../driver';
 export interface Mood {
     state: AllowedState;
@@ -19,6 +20,8 @@ export interface Doc {
     items: Record<string, PlanItem>;
     /** The task someone chose to do first (by Claude or by tapping), or null. */
     focusId: string | null;
+    /** Habits (no streaks): see src/dashboard/habits.ts */
+    habits: Record<string, Habit>;
 }
 export declare const emptyDoc: (now: number) => Doc;
 /** The plan as a list, for the screen. */
@@ -63,6 +66,13 @@ export type Call = {
 } | {
     tool: 'focus';
     id: string | null;
+} | {
+    tool: 'habit';
+    action: 'added' | 'removed' | 'check' | 'uncheck';
+    id: string;
+    title?: string;
+    perWeek?: number;
+    plan?: string;
 } | {
     tool: 'flag';
     flag: 'waiting' | 'blocked' | 'break' | 'working';

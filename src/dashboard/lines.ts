@@ -7,6 +7,8 @@ export interface LineContext {
   /** next appointment or task, for calm moments */
   /** the one thing that is "Nu" on the screen */
   nowTitle?: string;
+  /** a habit worth a nudge today (not done, week goal not met) */
+  habit?: { title: string; plan?: string };
   nextTitle?: string;
   nextIn?: string;
   /** an open task that is past its deadline for a while: still open, never blamed */
@@ -29,6 +31,6 @@ export function dashyLine(res: Resolution, c: LineContext = {}): string {
     case 'break': return 'Pauze. Rustig aan.';
     case 'working': return 'Lekker bezig. Houd vast.';
     case 'quiet': return c.stale ? `${c.stale} staat nog open. Zullen we een nieuw moment kiezen?` : 'Het is stil. Begin klein: tien minuten is genoeg.';
-    case 'idle': return c.music ? `Ik hoor ${c.music}.` : c.nowTitle ? `Nu: ${c.nowTitle}.` : c.nextTitle ? `Straks: ${c.nextTitle}${c.nextIn ? ` (over ${c.nextIn})` : ''}.` : 'Alles rustig.';
+    case 'idle': return c.music ? `Ik hoor ${c.music}.` : c.nowTitle ? `Nu: ${c.nowTitle}.` : c.habit ? (c.habit.plan ? `${c.habit.plan}` : `Een kleine ${c.habit.title.toLowerCase()} vandaag?`) : c.nextTitle ? `Straks: ${c.nextTitle}${c.nextIn ? ` (over ${c.nextIn})` : ''}.` : 'Alles rustig.';
   }
 }

@@ -26,11 +26,11 @@ const call = async (c: Client, name: string, args: Record<string, unknown>) => {
   return { isError: !!r.isError, body: JSON.parse(((r.content as { text: string }[])[0]).text) };
 };
 
-test('a real MCP client can connect, list the six tools, and call them', async () => {
+test('a real MCP client can connect, list the seven tools, and call them', async () => {
   const { fetchLike, store } = setup();
   const c = await connect(fetchLike);
   const tools = await c.listTools();
-  assert.deepEqual(tools.tools.map(t => t.name).sort(), ['dashy_activity', 'dashy_appointment', 'dashy_flag', 'dashy_focus', 'dashy_mood', 'dashy_task']);
+  assert.deepEqual(tools.tools.map(t => t.name).sort(), ['dashy_activity', 'dashy_appointment', 'dashy_flag', 'dashy_focus', 'dashy_habit', 'dashy_mood', 'dashy_task']);
   for (const t of tools.tools) { assert.ok(t.description && t.description.length > 20, t.name); assert.equal(t.annotations?.destructiveHint, false); assert.equal(t.annotations?.openWorldHint, false); }
   const mood = tools.tools.find(t => t.name === 'dashy_mood')!;
   assert.deepEqual((mood.inputSchema.properties as any).state.enum, ['idle', 'working', 'thinking', 'waiting', 'happy', 'sad', 'angry', 'strict', 'dancing', 'sleepy']);
@@ -117,7 +117,7 @@ test('state endpoint: the app sees what Claude and the driver decided, with a re
   const s = await fetchDashyState({ url: 'http://x/api/dashy-state', token: STATE, fetch: stateFetch });
   assert.deepEqual([s.state, s.line, s.source], ['dancing', 'Feest!', 'claude']);
   assert.equal(s.nextWakeAt, clock + 30 * 60_000);
-  assert.deepEqual(await fetchDashyState({ url: 'http://x/api/dashy-state', token: MCP, fetch: stateFetch }), { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null }, 'the MCP token is not accepted here either');
+  assert.deepEqual(await fetchDashyState({ url: 'http://x/api/dashy-state', token: MCP, fetch: stateFetch }), { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [] }, 'the MCP token is not accepted here either');
   await c.close();
 });
 
@@ -137,13 +137,13 @@ test('state endpoint failures all answer with a valid calm body and the right st
 });
 
 test('client never throws or hangs: bad status, bad body, wrong values, network error, no answer', async () => {
-  const calm = { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null };
+  const calm = { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [] };
   const resp = (b: string, status = 200) => async () => new Response(b, { status });
   const good = { state: 'happy', line: 'x', source: 'claude', nextWakeAt: null, rev: 3 };
   for (const f of [async () => { throw new TypeError('x'); }, resp(JSON.stringify(good), 500), resp('<html>'), resp('null'), resp(JSON.stringify({ ...good, state: 'banana' })),
     resp(JSON.stringify({ ...good, line: 'x'.repeat(101) })), resp(JSON.stringify({ ...good, source: 'hacked' })), resp(JSON.stringify({ ...good, nextWakeAt: 'soon' })), () => new Promise<Response>(() => {})])
     assert.deepEqual(await fetchDashyState({ url: 'http://x', token: 't', timeoutMs: 50, fetch: f as never }), calm);
-  assert.deepEqual(await fetchDashyState({ url: 'http://x', token: 't', fetch: resp(JSON.stringify({ ...good, extra: 'ignored' })) as never }), { ...good, items: [], focusId: null });
+  assert.deepEqual(await fetchDashyState({ url: 'http://x', token: 't', fetch: resp(JSON.stringify({ ...good, extra: 'ignored' })) as never }), { ...good, items: [], focusId: null, habits: [] });
 });
 
 test('emptyDoc is exported for tests only: a calm start', () => assert.equal(view(emptyDoc(clock), clock).state, 'idle'));

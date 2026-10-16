@@ -1,3 +1,4 @@
+import type { Habit } from '../dashboard/habits';
 import type { PlanItem } from '../dashboard/plan';
 import { type Doc, type Store } from './dashyStore';
 export interface StateHttpDeps {
@@ -18,6 +19,7 @@ export interface StateBody {
     at: number;
     items: PlanItem[];
     focusId: string | null;
+    habits: Habit[];
 }
 /** What the screen needs from the document: the state to show, and the plan. */
 export declare function buildStateBody(doc: Doc, now: number): StateBody;

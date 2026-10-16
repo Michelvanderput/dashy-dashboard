@@ -1,11 +1,12 @@
 import type { DashyState } from './core';
+import { HABIT_LIMITS, type Habit } from './dashboard/habits';
 import type { PlanItem } from './dashboard/plan';
 
-export interface RemoteState { state: DashyState; line: string; source: 'driver' | 'claude' | 'fallback'; nextWakeAt: number | null; rev: number; /** which driver rule decided, when the server says */ rule?: string; /** the plan (titles), when the server keeps it */ items: PlanItem[]; focusId: string | null }
+export interface RemoteState { state: DashyState; line: string; source: 'driver' | 'claude' | 'fallback'; nextWakeAt: number | null; rev: number; /** which driver rule decided, when the server says */ rule?: string; /** the plan (titles), when the server keeps it */ items: PlanItem[]; focusId: string | null; habits: Habit[] }
 export interface StateClientOptions { url: string; token: string; timeoutMs?: number; fetch?: typeof fetch }
 
 const STATES: readonly string[] = ['idle', 'received', 'working', 'thinking', 'waiting', 'blocked', 'done', 'happy', 'sad', 'angry', 'strict', 'dancing', 'sleepy'];
-export const CALM: RemoteState = Object.freeze({ state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null }) as RemoteState;
+export const CALM: RemoteState = Object.freeze({ state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [] }) as RemoteState;
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
@@ -24,6 +25,17 @@ function parseItem(x: unknown): PlanItem {
   return item;
 }
 
+function parseHabit(x: unknown): Habit {
+  if (typeof x !== 'object' || x === null) throw new Error('bad habit');
+  const o = x as Record<string, unknown>;
+  if (typeof o.id !== 'string' || !ID.test(o.id)) throw new Error('bad habit id');
+  if (typeof o.title !== 'string' || !o.title || o.title.length > HABIT_LIMITS.title) throw new Error('bad habit title');
+  if (!Number.isInteger(o.perWeek) || (o.perWeek as number) < 1 || (o.perWeek as number) > 7) throw new Error('bad habit target');
+  if (!Array.isArray(o.done) || o.done.length > 40 || !o.done.every(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error('bad habit days');
+  if (o.plan !== undefined && (typeof o.plan !== 'string' || o.plan.length > HABIT_LIMITS.plan)) throw new Error('bad habit plan');
+  return { id: o.id, title: o.title, perWeek: o.perWeek as number, done: o.done as string[], ...(o.plan !== undefined ? { plan: o.plan as string } : {}) };
+}
+
 /** Strict check of the state body; throws on anything unexpected. Unknown extra keys are ignored (the server may add some). */
 export function parseRemoteState(raw: unknown): RemoteState {
   const v: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -37,7 +49,9 @@ export function parseRemoteState(raw: unknown): RemoteState {
   if (o.items !== undefined && (!Array.isArray(o.items) || o.items.length > 400)) throw new Error('bad items');
   const items = ((o.items as unknown[] | undefined) ?? []).map(parseItem);
   if (o.focusId !== undefined && o.focusId !== null && (typeof o.focusId !== 'string' || !ID.test(o.focusId))) throw new Error('bad focusId');
-  return { items, focusId: (o.focusId as string | null | undefined) ?? null, state: o.state as DashyState, line: o.line, source: o.source, nextWakeAt: wake as number | null, rev: typeof o.rev === 'number' ? o.rev : 0, ...(typeof o.rule === 'string' && o.rule.length < 30 ? { rule: o.rule } : {}) };
+  if (o.habits !== undefined && (!Array.isArray(o.habits) || o.habits.length > HABIT_LIMITS.count)) throw new Error('bad habits');
+  const habits = ((o.habits as unknown[] | undefined) ?? []).map(parseHabit);
+  return { habits, items, focusId: (o.focusId as string | null | undefined) ?? null, state: o.state as DashyState, line: o.line, source: o.source, nextWakeAt: wake as number | null, rev: typeof o.rev === 'number' ? o.rev : 0, ...(typeof o.rule === 'string' && o.rule.length < 30 ? { rule: o.rule } : {}) };
 }
 
 /** Never throws, never hangs: any error, timeout, bad status or invalid body gives the calm fallback (idle, no text). */
@@ -56,13 +70,13 @@ export async function fetchDashyState(o: StateClientOptions): Promise<RemoteStat
   } catch { return { ...CALM }; } finally { clearTimeout(timer); }
 }
 
-export type ActionKind = 'done' | 'undo';
+export type ActionKind = 'done' | 'undo' | 'add' | 'focus' | 'check' | 'uncheck';
 /** Check off (or undo) a task. Resolves to the fresh state, or null when it did not work (the screen then just keeps what it has). */
-export async function sendAction(o: { url: string; token: string; action: ActionKind; id: string; timeoutMs?: number; fetch?: typeof fetch }): Promise<RemoteState | null> {
+export async function sendAction(o: { url: string; token: string; action: ActionKind; id?: string | null; title?: string; timeoutMs?: number; fetch?: typeof fetch }): Promise<RemoteState | null> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), o.timeoutMs ?? 8000);
   try {
-    const res = await (o.fetch ?? fetch)(o.url, { method: 'POST', headers: { authorization: `Bearer ${o.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: o.action, id: o.id }), signal: ctl.signal, cache: 'no-store' });
+    const res = await (o.fetch ?? fetch)(o.url, { method: 'POST', headers: { authorization: `Bearer ${o.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: o.action, ...(o.id !== undefined ? { id: o.id } : {}), ...(o.title !== undefined ? { title: o.title } : {}) }), signal: ctl.signal, cache: 'no-store' });
     if (!res.ok) return null;
     return parseRemoteState(await res.text());
   } catch { return null; } finally { clearTimeout(timer); }

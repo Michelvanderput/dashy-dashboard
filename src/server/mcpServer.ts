@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ALLOWED_STATES, MAX_LINE } from '../advice';
+import { HABIT_LIMITS } from '../dashboard/habits';
 import { LIMITS, nowOf, update, view, type Call, type Store } from './dashyStore';
 
 export interface McpDeps { store: Store; now: () => number; log?: (msg: string) => void }
@@ -13,7 +14,7 @@ const text = (o: unknown, isError = false) => ({ content: [{ type: 'text' as con
  */
 export function createDashyMcp(deps: McpDeps): McpServer {
   const server = new McpServer({ name: 'dashy', version: '0.1.0' }, {
-    instructions: 'Dashy is a screen that shows the day of the user and a small avatar that reacts to it. Keep the plan up to date with dashy_task (tasks, with a short title and an optional deadline) and dashy_appointment (appointments with a start); the app decides how Dashy reacts (deadlines make him strict or angry) and which ONE thing is "Nu" (the result tells you). Use dashy_focus to choose the task to do first, dashy_flag and dashy_activity for situations, and dashy_mood for a mood and one short line of your own. Ids are chosen by you and must stay the same for the same task. Titles and notes are shown on the screen and stored in the owner\'s own database: keep them short and do not put secrets in them.',
+    instructions: 'Dashy is a screen that shows the day of the user and a small avatar that reacts to it. Keep the plan up to date with dashy_task (tasks, with a short title and an optional deadline) and dashy_appointment (appointments with a start); the app decides how Dashy reacts (deadlines make him strict or angry) and which ONE thing is "Nu" (the result tells you). Use dashy_habit for habits (no streaks: only "x of y this week", always with an if-then plan when possible). Use dashy_focus to choose the task to do first, dashy_flag and dashy_activity for situations, and dashy_mood for a mood and one short line of your own. Ids are chosen by you and must stay the same for the same task. Titles and notes are shown on the screen and stored in the owner\'s own database: keep them short and do not put secrets in them.',
   });
 
   async function run(call: Call) {
@@ -42,6 +43,19 @@ export function createDashyMcp(deps: McpDeps): McpServer {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async a => run({ tool: 'task', action: a.action, id: a.id, due: a.due, title: a.title, note: a.note }));
+
+  server.registerTool('dashy_habit', {
+    title: 'Add, change, remove or check off a habit',
+    description: 'Habits are shown WITHOUT streaks: only "x of y this week", so a missed day costs nothing. action "added" (also changes an existing id): title (max 40), perWeek 1-7, and optionally plan = an if-then plan like "Als ik koffie zet, dan loop ik 5 minuten" (max 100). "check" or "uncheck" marks today. "removed" deletes it. Never judge a missed habit; offer a smaller version instead.',
+    inputSchema: {
+      action: z.enum(['added', 'removed', 'check', 'uncheck']),
+      id: z.string().describe('Your own stable id, 1-64 characters: letters, digits, - and _'),
+      title: z.string().max(HABIT_LIMITS.title).optional(),
+      perWeek: z.number().int().min(1).max(7).optional().describe('How many days a week; default 3'),
+      plan: z.string().max(HABIT_LIMITS.plan).optional().describe('If-then plan: "Als ..., dan ..."'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async a => run({ tool: 'habit', action: a.action, id: a.id, title: a.title, perWeek: a.perWeek, plan: a.plan }));
 
   server.registerTool('dashy_appointment', {
     title: 'Add or remove an appointment',

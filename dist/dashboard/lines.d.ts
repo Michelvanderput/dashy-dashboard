@@ -11,6 +11,11 @@ export interface LineContext {
     /** next appointment or task, for calm moments */
     /** the one thing that is "Nu" on the screen */
     nowTitle?: string;
+    /** a habit worth a nudge today (not done, week goal not met) */
+    habit?: {
+        title: string;
+        plan?: string;
+    };
     nextTitle?: string;
     nextIn?: string;
     /** an open task that is past its deadline for a while: still open, never blamed */

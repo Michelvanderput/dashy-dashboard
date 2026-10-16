@@ -5,6 +5,7 @@
 import { ALLOWED_STATES, MAX_LINE, oneLine, type AllowedState } from '../advice';
 import type { DashyState } from '../core';
 import { nowTask, type NowPick, type PlanItem } from '../dashboard/plan';
+import { HABIT_LIMITS, setToday, type Habit } from '../dashboard/habits';
 import { initialDriverState, nextWakeAt, reduce, resolve, type DriverEvent, type DriverState, type RuleName } from '../driver';
 
 export interface Mood { state: AllowedState; line: string; until: number }
@@ -14,8 +15,10 @@ export interface Doc {
   items: Record<string, PlanItem>;
   /** The task someone chose to do first (by Claude or by tapping), or null. */
   focusId: string | null;
+  /** Habits (no streaks): see src/dashboard/habits.ts */
+  habits: Record<string, Habit>;
 }
-export const emptyDoc = (now: number): Doc => ({ rev: 0, driver: initialDriverState(now), mood: null, items: {}, focusId: null });
+export const emptyDoc = (now: number): Doc => ({ rev: 0, driver: initialDriverState(now), mood: null, items: {}, focusId: null, habits: {} });
 /** The plan as a list, for the screen. */
 export const planOf = (doc: Doc): PlanItem[] => Object.values(doc.items);
 /** The one thing to do now, as the screen will show it (so Claude can see it too). */
@@ -45,6 +48,7 @@ export type Call =
   | { tool: 'task'; action: 'added' | 'done' | 'removed' | 'due' | 'reopen'; id: string; due?: string | null; title?: string; note?: string }
   | { tool: 'appointment'; action: 'added' | 'removed'; id: string; title?: string; start?: string; end?: string | null; note?: string }
   | { tool: 'focus'; id: string | null }
+  | { tool: 'habit'; action: 'added' | 'removed' | 'check' | 'uncheck'; id: string; title?: string; perWeek?: number; plan?: string }
   | { tool: 'flag'; flag: 'waiting' | 'blocked' | 'break' | 'working'; value: boolean }
   | { tool: 'activity' }
   | { tool: 'mood'; state?: string; line?: string; minutes?: number; clear?: boolean };
@@ -71,7 +75,7 @@ function prune(d: Doc, now: number): Doc {
   const focusId = d.focusId && items[d.focusId] && !items[d.focusId].done ? d.focusId : null;
   return { ...d, items, focusId };
 }
-const cleanTitle = (t: unknown) => oneLine(t ?? '', LIMITS.title);
+const cleanTitle = (t: unknown, max: number = LIMITS.title) => oneLine(t ?? '', max);
 
 /** Pure: returns a new document or an error. Never mutates the input. */
 export function apply(doc: Doc, call: Call, now: number): Outcome {
@@ -129,6 +133,26 @@ export function apply(doc: Doc, call: Call, now: number): Outcome {
       if (!it || it.done) return { ok: false, error: `no open item with id ${call.id}` };
       return { ok: true, doc: bump({ focusId: call.id }) };
     }
+    case 'habit': {
+      if (!LIMITS.idPattern.test(call.id ?? '')) return { ok: false, error: 'id must be 1-64 characters: letters, digits, - and _' };
+      const prev = doc.habits[call.id];
+      if (call.action === 'removed') { const habits = { ...doc.habits }; delete habits[call.id]; return { ok: true, doc: bump({ habits }) }; }
+      if (call.action === 'check' || call.action === 'uncheck') {
+        if (!prev) return { ok: false, error: `no habit with id ${call.id}` };
+        const next = setToday(prev, call.action === 'check', now);
+        // Doing a habit is a sign of life, so Dashy is not sad about it.
+        const driver = call.action === 'check' ? reduce(doc.driver, { type: 'activity' }, now) : doc.driver;
+        return { ok: true, doc: bump({ habits: { ...doc.habits, [call.id]: next }, driver }) };
+      }
+      const title = cleanTitle(call.title, HABIT_LIMITS.title) || prev?.title;
+      if (!title) return { ok: false, error: 'a habit needs a title' };
+      const perWeek = call.perWeek ?? prev?.perWeek ?? 3;
+      if (!Number.isInteger(perWeek) || perWeek < 1 || perWeek > 7) return { ok: false, error: 'perWeek must be a whole number from 1 to 7' };
+      if (!prev && Object.keys(doc.habits).length >= HABIT_LIMITS.count) return { ok: false, error: `at most ${HABIT_LIMITS.count} habits` };
+      const plan = call.plan !== undefined ? oneLine(call.plan, HABIT_LIMITS.plan) : prev?.plan;
+      const habit: Habit = { id: call.id, title, perWeek, ...(plan ? { plan } : {}), done: prev?.done ?? [] };
+      return { ok: true, doc: bump({ habits: { ...doc.habits, [call.id]: habit } }) };
+    }
     case 'flag': {
       if (!['waiting', 'blocked', 'break', 'working'].includes(call.flag) || typeof call.value !== 'boolean') return { ok: false, error: 'flag must be waiting, blocked, break or working, with a boolean value' };
       const type = call.flag === 'break' ? 'break' : call.flag;
@@ -174,7 +198,15 @@ export function parseDoc(raw: unknown): Doc | null {
         items[id] = i;
       }
     }
-    return { rev: d.rev, driver: d.driver, mood: d.mood ?? null, items, focusId: typeof d.focusId === 'string' && items[d.focusId] ? d.focusId : null };
+    const habits: Record<string, Habit> = {};
+    if (d.habits !== undefined && d.habits !== null) {
+      if (typeof d.habits !== 'object' || Array.isArray(d.habits)) return null;
+      for (const [id, h] of Object.entries(d.habits)) {
+        if (!LIMITS.idPattern.test(id) || !h || h.id !== id || typeof h.title !== 'string' || !Number.isInteger(h.perWeek) || h.perWeek < 1 || h.perWeek > 7 || !Array.isArray(h.done) || !h.done.every(x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)) || (h.plan !== undefined && typeof h.plan !== 'string')) return null;
+        habits[id] = h;
+      }
+    }
+    return { rev: d.rev, driver: d.driver, mood: d.mood ?? null, habits, items, focusId: typeof d.focusId === 'string' && items[d.focusId] ? d.focusId : null };
   } catch { return null; }
 }
 
