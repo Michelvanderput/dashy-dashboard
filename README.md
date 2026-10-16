@@ -86,6 +86,32 @@ Hij wordt bewust **nooit boos** op taken (`TASK_DRIVER_CONFIG`), en een tijdstip
 
 Koppelen: zet het dashboard als JSON achter een https-adres (localhost mag ook over http) en open de app eenmalig met `https://<app>/#tasks=<url>&key=<sleutel>`. Dat wordt op dit apparaat onthouden en uit de adresbalk gehaald; de sleutel (optioneel) gaat mee als `Authorization: Bearer`. In React: `useDashyTasks({ url, token })`. Een mislukte poll houdt het laatste beeld vast en toont een rustige foutmelding.
 
+## Taken noteren via Claude (MCP)
+
+De server staat in `src/server/` en draait als Vercel-functies in `api/`. Het idee komt uit de hoofd-Dashy (korte titel, `due` en `note` apart, Nu doen versus Straks, `left_open` zonder schuld, tools in batches), met bewuste verbeteringen:
+
+| Hoofd-Dashy | Hier | Waarom |
+|---|---|---|
+| Alleen-datum wordt opgeslagen als 07:00 | `hasTime` is een eigen veld | een echte taak om 07:00 blijft een echte taak |
+| Dashboard geeft tijden als tekst ("morgen 14:00") | epoch-tijd (`dueAt`) plus `hasTime` | niemand hoeft Nederlandse tekst terug te ontleden |
+| Eén set rijen per gebruiker | één record per taak (Redis-hash) | Claude en het scherm overschrijven elkaar niet |
+| Een tijd die niet bestaat wordt stil verschoven | wordt geweigerd met uitleg (zomertijd-uur, 30 februari) | Claude kan het meteen verbeteren |
+| Een batch met één foute taak: de rest gaat door of niet, afhankelijk | alles wordt eerst gecontroleerd, dan pas geschreven | een fout verandert niets |
+| Interne fouten worden als tekst teruggegeven | alleen invoerfouten gaan naar Claude, de rest blijft algemeen | geen details uit de opslag in een gesprek |
+| Geheim in de URL is de enige stap voor sommige koppelingen | Bearer-header is standaard; het pad-geheim (`/api/mcp/<token>`) is een bewuste uitzondering | een geheim in een URL komt in logs terecht |
+
+Bewust **niet** overgenomen: Supabase, meerdere gebruikers, de eigen OAuth-server en de native apps. Dit is een scherm voor één persoon.
+
+**Tools** (5, alles in batches): `dashboard`, `add_tasks`, `update_tasks`, `reorder_tasks`, `appointment`. Titel max 60 tekens zonder tijd of datum erin; tijd in `due` (`YYYY-MM-DD HH:mm`, `YYYY-MM-DD` of `HH:mm`, Nederlandse tijd); toelichting in `note` (max 100).
+
+**Opzetten**
+1. Maak een gratis Upstash Redis-database en zet `UPSTASH_REDIS_REST_URL` en `UPSTASH_REDIS_REST_TOKEN` in Vercel.
+2. Zet twee verschillende lange sleutels: `DASHY_MCP_TOKEN` (Claude, mag schrijven) en `DASHY_STATE_TOKEN` (het scherm, alleen lezen). Zie `.env.example`.
+3. Claude: Instellingen, Connectors, eigen connector toevoegen met `https://<app>/api/mcp` en de header `Authorization: Bearer <DASHY_MCP_TOKEN>`. Kan jouw Claude-app geen header meegeven, gebruik dan `https://<app>/api/mcp/<DASHY_MCP_TOKEN>`.
+4. Scherm koppelen: open eenmalig `https://<app>/#tasks=https://<app>/api/state&key=<DASHY_STATE_TOKEN>`.
+
+**Lokaal proberen:** `npm run api:dev` start dezelfde handlers op `http://127.0.0.1:8787` met een geheugenopslag (weg bij herstart) en toont de ontwikkelsleutels. Koppel de app met `#tasks=http://127.0.0.1:8787/api/state&key=dev-state-token-0123456789abcdef`. Getest met de officiële MCP-client.
+
 ## Aansturen vanuit je app
 
 Jouw app vertaalt gebeurtenissen naar een toestand. Voorbeeld:

@@ -7,6 +7,7 @@
  * never angry, and a deadline in the past is ignored by the driver (`TASK_DRIVER_CONFIG`).
  */
 import type { DriverConfig, DriverEvent } from './driver';
+import { addDays, localParts } from './server/time';
 
 export interface DashTask { id: string; title: string; category: string; /** ms since epoch, only when the task has a time of day */ due: number | null; /** the text as shown ("morgen 14:00") */ when: string; note: string }
 export interface DashboardSnapshot { today: string; tasks: DashTask[]; leftOpen: string[]; timeTodayMin: number }
@@ -45,6 +46,18 @@ export function parseWhen(text: string, today: string): number | null {
   return day.getTime();
 }
 
+const p2 = (n: number) => String(n).padStart(2, '0');
+/** "vandaag 19:00", "morgen", "zo 10:00", "22 okt 19:00" for a due moment (Dutch time). */
+export function whenLabel(dueAt: number, hasTime: boolean, now: number): string {
+  const d = localParts(dueAt), t = localParts(now);
+  const day = (n: number) => { const x = addDays(t.y, t.mo, t.d, n); return `${x.y}-${p2(x.mo)}-${p2(x.d)}`; };
+  const time = hasTime ? ` ${p2(d.h)}:${p2(d.mi)}` : '';
+  if (d.date === day(0)) return `vandaag${time}`;
+  if (d.date === day(1)) return `morgen${time}`;
+  for (let n = 2; n <= 6; n++) if (d.date === day(n)) return `${DAYS[d.weekday]}${time}`;
+  return `${d.d} ${MONTHS[d.mo - 1]}${time}`;
+}
+
 const str = (v: unknown, max: number) => typeof v === 'string' && v.length <= max;
 /** "0m", "45m", "1u 20m" -> minutes. */
 export function parseMinutes(s: unknown): number {
@@ -58,6 +71,7 @@ export function parseDashboard(raw: unknown): DashboardSnapshot {
   const v: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (typeof v !== 'object' || v === null) throw new Error('not an object');
   const o = v as Record<string, unknown>;
+  if (o.v === 2) return parseV2(o);
   const today = typeof o.today === 'string' ? /^(\d{4}-\d{2}-\d{2})/.exec(o.today)?.[1] : undefined;
   if (!today) throw new Error('bad today');
   if (!Array.isArray(o.tasks) || o.tasks.length > 500) throw new Error('bad tasks');
@@ -67,6 +81,22 @@ export function parseDashboard(raw: unknown): DashboardSnapshot {
   });
   const leftOpen = Array.isArray(o.left_open) ? o.left_open.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
   return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today) };
+}
+
+/** Version 2 (server/plan.ts StateBody): epoch times and an explicit hasTime, nothing to parse out of Dutch text. */
+function parseV2(o: Record<string, unknown>): DashboardSnapshot {
+  const today = typeof o.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.today) ? o.today : null;
+  const nowMs = typeof o.now === 'number' && Number.isFinite(o.now) ? o.now : null;
+  if (!today || nowMs === null) throw new Error('bad today');
+  if (!Array.isArray(o.tasks) || o.tasks.length > 500) throw new Error('bad tasks');
+  const tasks = o.tasks.map((r: unknown): DashTask => {
+    const t = r as Record<string, unknown> | null;
+    if (typeof t !== 'object' || t === null || !/^[A-Za-z0-9_-]{1,64}$/.test(String(t.id)) || !str(t.title, 200) || !str(t.category, 40)) throw new Error('bad task');
+    const dueAt = typeof t.dueAt === 'number' && Number.isFinite(t.dueAt) ? t.dueAt : null, hasTime = t.hasTime === true;
+    return { id: t.id as string, title: t.title as string, category: t.category as string, due: dueAt !== null && hasTime ? dueAt : null, when: dueAt === null ? '' : whenLabel(dueAt, hasTime, nowMs), note: str(t.note, 400) ? (t.note as string) : '' };
+  });
+  const leftOpen = Array.isArray(o.leftOpen) ? o.leftOpen.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
+  return { today, tasks, leftOpen, timeTodayMin: 0 };
 }
 
 /** What changed between two snapshots, as driver events. `prev` null = first look. */

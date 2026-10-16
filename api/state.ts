@@ -1,0 +1,6 @@
+import { handleState } from '../src/server/mcp';
+import { storeFromEnv } from '../src/server/env';
+
+/** What the screen polls: GET https://<app>/api/state with  Authorization: Bearer <DASHY_STATE_TOKEN>. Read-only. */
+const run = (req: Request) => handleState(req, { store: storeFromEnv(), token: process.env.DASHY_STATE_TOKEN, now: Date.now });
+export const GET = run, POST = run, PUT = run, DELETE = run, PATCH = run, OPTIONS = run;

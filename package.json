@@ -18,7 +18,8 @@
     "swift:reference": "tsx scripts/swift-reference.ts",
     "swift:test": "cd swift/DashyKit && swift test",
     "dev": "vite",
-    "app:build": "vite build"
+    "app:build": "vite build",
+    "api:dev": "tsx scripts/dev-api.ts"
   },
   "license": "UNLICENSED",
   "dependencies": {
