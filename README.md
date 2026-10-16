@@ -138,6 +138,14 @@ npm run desktop:build    # app + .dmg in src-tauri/target/release/bundle/
 - Het uitlezen van de muis over het hele scherm vraagt geen extra toestemming van macOS.
 - Getest: de Rust-code (compileert zonder fouten) en de webpagina in een browser. **Niet** getest: het venster zelf op een echte Mac. Loop je ergens tegenaan, meld het dan.
 
+## Klok, datum en weer
+
+Bovenaan het scherm staat de tijd groot, met de datum en het weeknummer. Ernaast het weer (temperatuur, wat het doet, hoog/laag en regenkans) van [Open-Meteo](https://open-meteo.com): gratis, zonder sleutel. De plaats stel je vast in; de browser vraagt nooit waar je bent.
+
+- `VITE_WEATHER_PLACE=Maastricht:50.85,5.69` (naam, breedtegraad, lengtegraad). Staat er niets of iets ongeldigs, dan wordt het Maastricht.
+- Het laatste goede antwoord wordt onthouden en direct getoond. Lukt verversen niet, dan blijft dat staan; na zes uur zonder vers antwoord verdwijnt het weer liever dan dat het fout is.
+- De taken staan nu als een groot "Nu doen"-blok (categoriekleur, tijd, notitie, één grote Klaar-knop) met daaronder "Daarna". Een verstreken tijd heet "nog open", nooit "te laat".
+
 ## Afspraak en dagbalk op het scherm
 
 Onder Dashy staat je dag in één oogopslag (`src/day.ts`, `DayPanel`):

@@ -44,3 +44,13 @@ export function isBookingTime(now: number, w?: import('./server/workday').Workda
   if (d.phase === 'free' || d.phase === 'before') return false;
   return d.phase === 'after' || d.end - now <= BOOKING_LEAD_MS;
 }
+
+/** How a task's time reads on the card: a countdown when it is close, the day and time otherwise. Calm: a time that has passed is just "nog open", never "late". */
+export interface TaskTiming { chip: string | null; soon: boolean; passed: boolean }
+export function taskTiming(t: { due: number | null; when: string }, now: number): TaskTiming {
+  if (t.due === null) return { chip: t.when || null, soon: false, passed: false };
+  const left = t.due - now;
+  if (left <= 0) return { chip: t.when || null, soon: false, passed: true };
+  if (left <= 3 * 3600_000) return { chip: `over ${duration(left)}`, soon: left <= 30 * 60_000, passed: false };
+  return { chip: t.when || null, soon: false, passed: false };
+}

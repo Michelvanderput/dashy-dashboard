@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
-import { DayPanel, Dashy, HoursPanel, NowPlayingBlock, useDashyTasks, useSpotify, useWakeLock } from '../src/react';
-import { burnInOffset, isKiosk, nowTask, type DashyState } from '../src';
+import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useSpotify, useWakeLock } from '../src/react';
+import { burnInOffset, isKiosk, parsePlace, type DashyState } from '../src';
 
 import { initialConnection } from './storage';
 
 const env = import.meta.env as Record<string, string | undefined>;
-/** Two things for now: the avatar and the music player. Everything else is rebuilt from here. */
 /** A media query as a boolean, kept up to date (for example a low screen: a phone on its side). */
 function useMediaQuery(query: string): boolean {
   const [on, setOn] = useState(() => typeof matchMedia === 'function' && matchMedia(query).matches);
   useEffect(() => { if (typeof matchMedia !== 'function') return; const m = matchMedia(query), f = () => setOn(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, [query]);
   return on;
 }
+
+const PLACE = parsePlace(env.VITE_WEATHER_PLACE); // "Maastricht:50.85,5.69"; the weather is for this place only
 
 export function App() {
   const spotifyId = env.VITE_SPOTIFY_CLIENT_ID;
@@ -31,49 +32,63 @@ export function App() {
   const toggleAwake = () => { const n = !awake; setAwake(n); try { localStorage.setItem('dashy.awake', n ? '1' : '0'); } catch { /* private mode */ } };
   const sp = useSpotify({ clientId: spotifyId ?? 'not-configured', redirectUri });
   const nowPlaying = spotifyId ? sp.nowPlaying : null;
+  const showMusic = !kiosk || !!nowPlaying; // a screen to look at has no use for an empty "Spotify is not connected" card
 
   // His mood follows your real tasks (driver rules); music only makes a calm Dashy dance.
   const [conn] = useState(initialConnection);
   const tasks = useDashyTasks({ url: conn?.url, token: conn?.token, actionUrl: conn?.actionUrl, actionToken: conn?.actionToken });
   const state: DashyState = nowPlaying?.playing && tasks.state === 'idle' ? 'dancing' : tasks.state;
-  const now = nowTask(tasks.snapshot), still = tasks.snapshot?.leftOpen.length ?? 0;
+  const snap = tasks.snapshot;
   // free time: after the working day and on days off the whole screen turns warmer (see the styles in index.html)
-  const mode = tasks.snapshot?.mode ?? 'work';
+  const mode = snap?.mode ?? 'work';
   useEffect(() => { document.documentElement.dataset.mode = mode; return () => { delete document.documentElement.dataset.mode; }; }, [mode]);
+  const notes = [
+    ...(tasks.lastOkAt && tasks.stale && !tasks.error ? [`Niet bijgewerkt sinds ${new Date(tasks.lastOkAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`] : []),
+    ...(tasks.error ? [tasks.error] : []),
+  ];
 
   return (
-    <main style={{ minHeight: '100dvh', display: 'grid', gap: 'clamp(12px,2vmin,24px)', padding: 'calc(clamp(12px,2vmin,24px) + env(safe-area-inset-top)) calc(clamp(12px,2vmin,24px) + env(safe-area-inset-right)) calc(clamp(12px,2vmin,24px) + env(safe-area-inset-bottom)) calc(clamp(12px,2vmin,24px) + env(safe-area-inset-left))', transform: kiosk ? `translate(${shift.x}px, ${shift.y}px)` : undefined, transition: 'transform 4s ease', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,22rem),1fr))', alignContent: 'center', maxWidth: 1100, margin: '0 auto', boxSizing: 'border-box' }}>
+    <main className={`dash${showMusic ? '' : ' nomusic'}`} style={{ padding: 'calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-top)) calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-right)) calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-bottom)) calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-left))', transform: kiosk ? `translate(${shift.x}px, ${shift.y}px)` : undefined, transition: 'transform 4s ease' }}>
       <h1 className="sr">Dashy</h1>
-      <section aria-labelledby="av" style={{ display: 'grid', placeItems: 'center', minHeight: 0 }}>
-        <h2 id="av" className="sr">Avatar</h2>
-        <div style={{ width: '100%', maxWidth: low ? 'min(30rem, 30vh)' : 'min(30rem, 42vh)', minWidth: '10rem', aspectRatio: '1' }}><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
-        {tasks.connected ? (
-          <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: '.95rem' }}>
-            {now ? <>Nu: <strong>{now.title}</strong>{now.when && <span style={{ opacity: .6 }}> · {now.when}</span>}</> : 'Niets open. Rust maar.'}
-            {!kiosk && now && tasks.complete && <button type="button" onClick={() => void tasks.complete!(now.id)} style={btn}>Klaar</button>}
-            {!kiosk && tasks.justDone && <span role="status" style={{ display: 'block', fontSize: '.85rem', marginTop: 8 }}>✓ {tasks.justDone.title}{tasks.undo && <> · <button type="button" onClick={() => void tasks.undo!()} style={link}>Ongedaan maken</button></>}</span>}
-            {mode === 'free' && (tasks.snapshot?.waiting ?? 0) > 0 && <span style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{tasks.snapshot!.waiting === 1 ? '1 werktaak wacht' : `${tasks.snapshot!.waiting} werktaken wachten`} tot de volgende werkdag</span>}
-            {still > 0 && <span style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{still} nog open van eerder</span>}
-            {tasks.lastOkAt && tasks.stale && !tasks.error && <span role="status" style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>Niet bijgewerkt sinds {new Date(tasks.lastOkAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>}
-            {tasks.error && <span role="status" style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{tasks.error}</span>}
-          </p>
+      <header className="dash-head">
+        <Clock compact={low} />
+        <WeatherView place={PLACE} compact={low} />
+      </header>
+
+      <div className="dash-left">
+        <section aria-labelledby="av" className="dash-avatar">
+          <h2 id="av" className="sr">Avatar</h2>
+          <div style={{ width: '100%', maxWidth: low ? 'min(30rem, 30vh)' : 'min(26rem, 38vh)', minWidth: '9rem', aspectRatio: '1' }}><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
+        </section>
+        <div className="dash-day">
+          {tasks.connected && snap && <DayPanel appointment={snap.appointment} workday={snap.workday} />}
+          {tasks.connected && snap && <HoursPanel hours={snap.hours} workday={snap.workday} compact={low} style={{ marginTop: low ? 8 : 12 }} />}
+        </div>
+      </div>
+
+      <div className="dash-tasks">
+        {tasks.connected && snap ? (
+          <TaskBoard tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} notes={notes}
+            onComplete={!kiosk ? tasks.complete : undefined} justDone={!kiosk ? tasks.justDone : null} onUndo={!kiosk ? tasks.undo : undefined} />
+        ) : tasks.connected ? (
+          <p role="status" style={{ margin: 0, opacity: .6 }}>{tasks.error ?? 'Taken laden…'}</p>
         ) : (
-          <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: '.8rem', opacity: .6, maxWidth: '26rem' }}>Nog niet gekoppeld aan je taken. Open de app eenmalig met <code>#tasks=https://…&amp;key=…&amp;act=…</code> achter het adres.</p>
+          <p style={{ margin: 0, fontSize: '.9rem', opacity: .65, maxWidth: '30rem' }}>Nog niet gekoppeld aan je taken. Open de app eenmalig met <code>#tasks=https://…&amp;key=…&amp;act=…</code> achter het adres.</p>
         )}
-        {tasks.connected && tasks.snapshot && <DayPanel appointment={tasks.snapshot.appointment} workday={tasks.snapshot.workday} style={{ marginTop: 16 }} />}
-        {tasks.connected && tasks.snapshot && <HoursPanel hours={tasks.snapshot.hours} workday={tasks.snapshot.workday} compact={low} style={{ marginTop: low ? 8 : 12 }} />}
-      </section>
-      <section aria-labelledby="mu" style={card}>
+      </div>
+
+      {showMusic && <section aria-labelledby="mu" className="dash-music" style={card}>
         <h2 id="mu" className="sr">Muziek</h2>
-        <NowPlayingBlock bare showDashy={false} nowPlaying={nowPlaying} status={spotifyId ? sp.status : 'error'} size="min(40vmin,180px)"
+        <NowPlayingBlock bare showDashy={false} nowPlaying={nowPlaying} status={spotifyId ? sp.status : 'error'} size={low ? 'min(26vmin,100px)' : 'min(40vmin,180px)'}
           kiosk={kiosk} onConnect={spotifyId ? sp.connect : undefined} onDisconnect={spotifyId ? sp.disconnect : undefined} onControl={spotifyId ? sp.control : undefined} canControl={sp.canControl} needsReconnect={sp.needsReconnect} controlError={sp.controlError} error={spotifyId ? sp.error : 'Spotify is nog niet gekoppeld: zet VITE_SPOTIFY_CLIENT_ID (zie README).'} spotifyLogoSrc={env.VITE_SPOTIFY_LOGO} />
         {!kiosk && spotifyId && sp.status !== 'connected' && (
           <p style={{ margin: 0, fontSize: '.8rem', opacity: .7, textAlign: 'center', overflowWrap: 'anywhere' }}>
             Deze app stuurt Spotify terug naar <code>{redirectUri}</code>. Precies dit adres moet bij Redirect URIs in je Spotify-app staan.
           </p>
         )}
-      </section>
-      <footer style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '4px 20px', justifyContent: 'center', alignItems: 'center', fontSize: '.8rem', opacity: .7 }}>
+      </section>}
+
+      <footer className="dash-foot">
         {!kiosk && (
           <>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}><input type="checkbox" checked={awake} onChange={toggleAwake} /> Scherm aan laten</label>
@@ -87,6 +102,4 @@ export function App() {
   );
 }
 
-const btn: React.CSSProperties = { display: 'block', margin: '12px auto 0', padding: '12px 28px', minHeight: 44, borderRadius: 999, border: 0, background: 'var(--ink)', color: 'var(--bg)', font: 'inherit', fontWeight: 600, cursor: 'pointer' };
-const link: React.CSSProperties = { background: 'none', border: 0, padding: 0, font: 'inherit', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' };
 const card: React.CSSProperties = { display: 'grid', gap: 16, justifyItems: 'center', alignContent: 'center', padding: 'clamp(18px,3vmin,32px)', borderRadius: 28, background: 'var(--card)' };

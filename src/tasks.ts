@@ -9,9 +9,16 @@
 import type { DriverConfig, DriverEvent } from './driver';
 import { addDays, localParts } from './server/time';
 
-export interface DashTask { id: string; title: string; category: string; /** ms since epoch, only when the task has a time of day */ due: number | null; /** the text as shown ("morgen 14:00") */ when: string; note: string }
+export interface DashTask {
+  id: string; title: string; category: string;
+  /** ms since epoch, only when the task has a time of day */ due: number | null;
+  /** the text as shown ("morgen 14:00") */ when: string; note: string;
+  /** "now" = can be done now, "later" = planned for later (Straks). */ state: 'now' | 'later';
+}
 export interface DashboardSnapshot {
   today: string; tasks: DashTask[]; leftOpen: string[]; timeTodayMin: number;
+  /** How many tasks were checked off today (Dutch day). */
+  doneToday: number;
   /** The next appointment (epoch ms), or null. */
   appointment: { title: string; at: number; endsAt: number | null } | null;
   /** The working day, for the day bar. */
@@ -96,10 +103,10 @@ export function parseDashboard(raw: unknown): DashboardSnapshot {
   if (!Array.isArray(o.tasks) || o.tasks.length > 500) throw new Error('bad tasks');
   const tasks = o.tasks.map((r: unknown): DashTask => {
     if (!Array.isArray(r) || !/^[A-Za-z0-9_-]{1,64}$/.test(String(r[0])) || !str(r[1], 200) || !str(r[2], 40) || !str(r[3] ?? '', 60)) throw new Error('bad task');
-    return { id: r[0] as string, title: r[1] as string, category: r[2] as string, when: (r[3] as string) ?? '', due: parseWhen((r[3] as string) ?? '', today), note: str(r[4], 400) ? (r[4] as string) : '' };
+    return { id: r[0] as string, title: r[1] as string, category: r[2] as string, when: (r[3] as string) ?? '', due: parseWhen((r[3] as string) ?? '', today), note: str(r[4], 400) ? (r[4] as string) : '', state: 'now' };
   });
   const leftOpen = Array.isArray(o.left_open) ? o.left_open.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
-  return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today), appointment: null, workday: DEFAULT_WORKDAY, mode: 'work', waiting: 0, hours: NO_HOURS };
+  return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today), doneToday: 0, appointment: null, workday: DEFAULT_WORKDAY, mode: 'work', waiting: 0, hours: NO_HOURS };
 }
 
 /** Version 2 (server/plan.ts StateBody): epoch times and an explicit hasTime, nothing to parse out of Dutch text. */
@@ -112,7 +119,7 @@ function parseV2(o: Record<string, unknown>): DashboardSnapshot {
     const t = r as Record<string, unknown> | null;
     if (typeof t !== 'object' || t === null || !/^[A-Za-z0-9_-]{1,64}$/.test(String(t.id)) || !str(t.title, 200) || !str(t.category, 40)) throw new Error('bad task');
     const dueAt = typeof t.dueAt === 'number' && Number.isFinite(t.dueAt) ? t.dueAt : null, hasTime = t.hasTime === true;
-    return { id: t.id as string, title: t.title as string, category: t.category as string, due: dueAt !== null && hasTime ? dueAt : null, when: dueAt === null ? '' : whenLabel(dueAt, hasTime, nowMs), note: str(t.note, 400) ? (t.note as string) : '' };
+    return { id: t.id as string, title: t.title as string, category: t.category as string, due: dueAt !== null && hasTime ? dueAt : null, when: dueAt === null ? '' : whenLabel(dueAt, hasTime, nowMs), note: str(t.note, 400) ? (t.note as string) : '', state: t.state === 'later' ? 'later' : 'now' };
   });
   const leftOpen = Array.isArray(o.leftOpen) ? o.leftOpen.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
   const a = o.appointment as Record<string, unknown> | null | undefined;
@@ -127,7 +134,8 @@ function parseV2(o: Record<string, unknown>): DashboardSnapshot {
         perProject: h.perProject.slice(0, 20).filter((p): p is { project: string | null; minutes: number; unbookedMin: number } => typeof p === 'object' && p !== null && typeof (p as { minutes?: unknown }).minutes === 'number')
           .map(p => ({ project: typeof p.project === 'string' ? p.project.slice(0, 60) : null, minutes: nn(p.minutes), unbookedMin: nn(p.unbookedMin) })) }
     : NO_HOURS;
-  return { today, tasks, leftOpen, timeTodayMin: 0, appointment, workday, mode: o.mode === 'free' ? 'free' : 'work', waiting: nn(o.waiting), hours };
+  const doneToday = Array.isArray(o.recentlyDone) ? o.recentlyDone.filter((d: unknown) => typeof d === 'object' && d !== null && typeof (d as { doneAt?: unknown }).doneAt === 'number' && localParts((d as { doneAt: number }).doneAt).date === today).length : 0;
+  return { today, tasks, leftOpen, timeTodayMin: 0, doneToday, appointment, workday, mode: o.mode === 'free' ? 'free' : 'work', waiting: nn(o.waiting), hours };
 }
 
 /** What changed between two snapshots, as driver events. `prev` null = first look. */
@@ -151,5 +159,5 @@ export function snapshotEvents(prev: DashboardSnapshot | null, next: DashboardSn
   return ev;
 }
 
-/** The task to show as "now": the first one (the server puts "Nu doen" first). */
-export const nowTask = (s: DashboardSnapshot | null): DashTask | null => s?.tasks[0] ?? null;
+/** The task to do now: the first one that can be done now (tasks planned for later are "Straks", not "Nu"). */
+export const nowTask = (s: DashboardSnapshot | null): DashTask | null => s?.tasks.find(t => t.state === 'now') ?? null;

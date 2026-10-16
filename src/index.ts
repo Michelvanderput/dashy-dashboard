@@ -22,6 +22,10 @@ export { FREE_TIME_DRIVER_CONFIG, NO_HOURS, TASK_DRIVER_CONFIG, nowTask, parseDa
 export type { DashTask, DashboardSnapshot, Hours } from './tasks';
 export { adoptPastedLink, adoptTasksHash, forgetTasksConnection, loadTasksConnection } from './tasks-connection';
 export type { TasksConnection } from './tasks-connection';
-export { BOOKING_LEAD_MS, SOON_MS, appointmentView, isBookingTime, dayProgress, duration, positionOnDay } from './day';
-export type { AppointmentView, DayPhase, DayProgress, Workday } from './day';
+export { BOOKING_LEAD_MS, SOON_MS, appointmentView, isBookingTime, taskTiming, dayProgress, duration, positionOnDay } from './day';
+export type { TaskTiming, AppointmentView, DayPhase, DayProgress, Workday } from './day';
 export { burnInOffset, isKiosk } from './kiosk';
+export { clockParts, isoWeek, msToNextMinute } from './clock';
+export type { ClockParts } from './clock';
+export { DEFAULT_PLACE, WEATHER_MAX_AGE_MS, WEATHER_REFRESH_MS, describeWeather, parsePlace, parseWeather, rainNote, weatherUrl } from './weather';
+export type { Place, Weather, WeatherIcon } from './weather';
