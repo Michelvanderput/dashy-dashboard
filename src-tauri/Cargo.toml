@@ -14,7 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # macos-private-api: needed for a transparent window on macOS (fine for your own Mac, not for the Mac App Store)
-tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 serde = { version = "1", features = ["derive"] }
 # the turntable: capture the aux input, encode it as MP3 and serve it to Sonos
 cpal = "0.15"

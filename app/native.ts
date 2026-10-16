@@ -33,6 +33,7 @@ const mock: Record<string, (a: Record<string, unknown>) => Promise<unknown>> = {
   stream_stop: async () => { await wait(300); Object.assign(demo, { streaming: false, listeners: 0, url: null, rooms: [], took_over: [] }); return { ...demo }; },
   auto_set: async a => { demo.auto = a.enabled === true; return { ...demo }; },
   sonos_volume: async () => undefined,
+  open_player: async () => { window.open('./player.html', '_blank', 'width=420,height=700'); },
 };
 
 export async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {

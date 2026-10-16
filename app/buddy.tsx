@@ -1,4 +1,5 @@
 import { StrictMode, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { call } from './native';
 import { createRoot } from 'react-dom/client';
 import { adoptPastedLink, forgetTasksConnection, mountDashy, nowTask, type DashyHandle } from '../src';
 import { musicState } from '../src/spotify/model';
@@ -18,6 +19,7 @@ export function Buddy() {
   const tasks = useDashyTasks({ url: conn?.url, token: conn?.token, actionUrl: conn?.actionUrl, actionToken: conn?.actionToken });
   const host = useRef<HTMLDivElement>(null), handle = useRef<DashyHandle | null>(null);
   const [bad, setBad] = useState(false);
+  const [hover, setHover] = useState(false);
   const [record, setRecord] = useState(false); // a record is really playing on the turntable
 
   useEffect(() => {
@@ -45,8 +47,10 @@ export function Buddy() {
   const task = nowTask(tasks.snapshot);
   const tryLink = (text: string) => { if (adoptPastedLink(text, store)) { setBad(false); setConn(initialConnection()); } else setBad(text.trim() !== ''); };
   return (
-    <div style={{ width: 200, height: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} style={{ position: 'relative', width: 200, height: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div ref={host} aria-label="Dashy" style={{ position: 'relative', width: 200, height: 200, flex: 'none' }} />
+      {/* opens the record player window: works even when the menu bar icon is hidden (a crowded menu bar, the notch) */}
+      {inTauri && <button type="button" aria-label="Platenspeler" title="Platenspeler" onClick={() => void call('open_player')} style={{ ...corner, opacity: hover || record ? 1 : 0.4 }}>♪</button>}
       {/* the strip under him: grab it to move him; it also shows what is up now */}
       {conn ? (
         <div data-tauri-drag-region style={strip}>
@@ -62,6 +66,7 @@ export function Buddy() {
   );
 }
 
+const corner: CSSProperties = { position: 'absolute', top: 6, right: 6, width: 30, height: 30, borderRadius: '50%', border: 0, background: 'rgba(20,20,22,.72)', color: '#fff', font: '15px/1 system-ui', cursor: 'pointer', transition: 'opacity .15s' };
 const strip: CSSProperties = { width: '100%', height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab' };
 const pill: CSSProperties = { maxWidth: 188, padding: '4px 10px', borderRadius: 999, background: 'rgba(20,20,22,.72)', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none' };
 const grip: CSSProperties = { width: 36, height: 5, borderRadius: 999, background: 'rgba(120,120,125,.55)', pointerEvents: 'none' };

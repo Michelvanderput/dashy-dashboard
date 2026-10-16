@@ -312,6 +312,12 @@ async fn sonos_volume(addr: String, volume: u8) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || sonos::set_volume(&addr, volume)).await.map_err(|e| e.to_string())?
 }
 
+/// Also reachable from the buddy window itself, so the menu bar icon is never the only way in.
+#[tauri::command]
+fn open_player(app: AppHandle) {
+    show_player(&app);
+}
+
 /// The record player window: choose the input and the speakers.
 fn show_player(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("player") {
@@ -335,7 +341,7 @@ fn show_player(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(Player { hub: Arc::new(Hub { tap: Mutex::new(None), playing: AtomicBool::new(false) }), inner: Mutex::new(Inner::default()), auto: Mutex::new(None) })
-        .invoke_handler(tauri::generate_handler![audio_inputs, status, listen_start, listen_stop, sonos_discover, sonos_add, stream_start, stream_stop, auto_set, sonos_volume])
+        .invoke_handler(tauri::generate_handler![audio_inputs, status, listen_start, listen_stop, sonos_discover, sonos_add, stream_start, stream_stop, auto_set, sonos_volume, open_player])
         .setup(|app| {
             // A buddy, not an app: no Dock icon and no app switcher entry; he lives in the menu bar.
             #[cfg(target_os = "macos")]
@@ -357,7 +363,8 @@ pub fn run() {
             let on_top_item = on_top.clone();
             let menu_window = window.clone();
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().expect("the app icon is bundled").clone())
+                .icon(tauri::include_image!("icons/tray.png"))
+                .icon_as_template(true) // black shapes: macOS shows them dark or light to match the menu bar
                 .tooltip("Dashy")
                 .menu(&menu)
                 .on_menu_event(move |app, event| match event.id().as_ref() {
