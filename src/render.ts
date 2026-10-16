@@ -36,49 +36,35 @@ export function layout(G: Geometry, small = false): Layout {
   };
 }
 
-export interface BodyMotionOptions {
-  /**
-   * Free room in px around the body: how far it may reach beyond its resting rectangle in any direction
-   * (the air above and beside it). The body is guaranteed to stay within it.
-   */
-  room?: number;
-  /** Multiplies the hop and shake before the limit applies (core.ts moves a small figure). Default 4. */
+export interface FaceMotionOptions {
+  /** Multiplies how far the face moves inside the block (core.ts moves a small figure, a block is big). Default 2.2. */
   gain?: number;
-  /** Multiplies the squash and stretch before the limit applies. Default 2. */
+  /** Squash and stretch of the face, same idea. Default 2. */
   squashGain?: number;
+  /** Minimum distance in core units between the eyes and the edge of the block. Default 12. */
+  margin?: number;
 }
-export interface BodyMotion { dx: number; dy: number; rot: number; sx: number; sy: number; radius: number; u: number }
+export interface FaceMotion { tx: number; ty: number; rot: number; sx: number; sy: number }
 
 /**
- * Body mode: turns core.ts's body (made for a 220-unit square) into a transform for a body of any size.
- * Pure. Presentation only: it scales and limits the numbers core.ts gives, it adds no movement of its own.
- *
- * Containment, by construction: the room is split into three budgets that add up to at most the room, so the body never
- * reaches past it, whatever core.ts does: shift 35%, tilt 40%, growth (stretching) 25%. Squashing inwards is free.
- * - u: px per core unit, from the SHORT side
- * - hop and shake: core units x u x gain, at most 35% of the room
- * - tilt about the bottom centre: the farthest corner moves at most 40% of the room
- * - stretch: grows at most 25% of the room per side; shrinking is unlimited (it stays inside anyway)
+ * Body mode, "the block is Dashy and the block stands still": all the life is in the face. This turns core.ts's face
+ * (made for a 220-unit body) into the transform of the face group on a block of any shape and size, in the same coordinate
+ * system as the viewBox (the block centre is 150,150; one unit = short side / 220 px).
+ * Pure. Presentation only: it amplifies and limits the numbers core.ts gives, it adds no movement of its own.
+ * The eyes are guaranteed to stay at least `margin` units inside the block: the shift is limited by the radius that holds both
+ * eyes, whatever the tilt, so no rotation or squash can push them out.
  */
-export function bodyMotion(G: Geometry, w: number, h: number, o: BodyMotionOptions = {}): BodyMotion {
-  const gain = o.gain ?? 4, squashGain = o.squashGain ?? 2, room = Math.max(0, o.room ?? 0);
-  const short = Math.min(w, h), u = short / 220;
+export function faceMotion(G: Geometry, w: number, h: number, o: FaceMotionOptions = {}): FaceMotion {
+  const gain = o.gain ?? 2.2, squashGain = o.squashGain ?? 2, margin = o.margin ?? 12;
+  const u = Math.min(w, h) / 220;
+  const hw = w / (2 * u), hh = h / (2 * u); // half size of the block in units
+  const dev = (v: number) => Math.max(-0.2, Math.min(0.2, (v / 1.01 - 1) * squashGain));
+  const sx = 1.01 * (1 + dev(G.face.sx)), sy = 1.01 * (1 + dev(G.face.sy));
+  // radius (in units, around the face centre) that contains every corner of both eyes, whatever the tilt, after scaling
+  let r = 0;
+  for (const e of G.eyes) r = Math.max(r, Math.hypot(Math.abs(e.x) + e.ew / 2 + 0.2 * e.eh, Math.abs(e.y) + e.eh / 2 + 0.2 * e.ew));
+  r *= Math.max(sx, sy);
+  const ax = Math.max(0, hw - margin - r), ay = Math.max(0, hh - margin - r);
   const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
-  const shift = 0.35 * room, swing = 0.4 * room, grow = 0.25 * room;
-  const sq = (v: number, side: number, total: number) => Math.max(-0.25, Math.min((v - 1) * squashGain * (short / total), grow / side));
-  const sx = 1 + sq(G.body.sx, w / 2, w), sy = 1 + sq(G.body.sy, h, h); // each side grows by (sx-1)*w/2; pivot at the bottom: all of sy's growth goes up
-  // CSS scales first and tilts after, so the tilt works on the scaled body: about the bottom centre a corner moves at most
-  // max(h*sy, w/2*sx)*sin(t) + (w/2*sx)*(1 - cos(t)); solve for the largest t within the tilt budget
-  const lever = Math.max(h * sy, (w / 2) * sx);
-  let lo = 0, hi = Math.PI / 4;
-  for (let i = 0; i < 30; i++) { const t = (lo + hi) / 2; if (lever * Math.sin(t) + (w / 2) * sx * (1 - Math.cos(t)) <= swing) lo = t; else hi = t; }
-  const maxRot = (lo * 180) / Math.PI;
-  return {
-    dx: clamp((G.body.tx - 150) * u * gain, shift),
-    dy: clamp((G.body.ty - 260) * u * gain, shift),
-    rot: clamp(G.body.rot, maxRot),
-    sx, sy,
-    radius: Math.min(G.rx * u, short / 2),
-    u,
-  };
+  return { tx: 150 + clamp((G.face.tx - 150) * gain, ax), ty: 150 + clamp((G.face.ty - 150) * gain, ay), rot: G.face.rot, sx, sy };
 }

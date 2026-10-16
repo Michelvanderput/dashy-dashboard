@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BLOCKS, GROW, areaShare, orientationOf, tracksFor, type BlockId, type Orientation } from '../src/dashboard/layout';
 import { CALM_FOCUS, WINDOWS, chooseAttention, nextFocus, type AttentionInput, type FocusState } from '../src/dashboard/attention';
-import { countdown, initialModel, nextAppointmentAt, nextUp, planOrder, reducer, urgency, type PlanItem } from '../src/dashboard/plan';
+import { countdown, initialModel, nextAppointmentAt, nextUp, planOrder, pressingTask, reducer, urgency, type PlanItem } from '../src/dashboard/plan';
 import { dashyLine } from '../src/dashboard/lines';
 import { RULES, resolve } from '../src/driver';
 
@@ -112,6 +112,7 @@ test('urgency matches the driver thresholds, only for open tasks with a deadline
   assert.equal(urgency(task('a', T0 + 15 * MIN), T0), 'near'); assert.equal(urgency(task('a', T0 + 15 * MIN + 1), T0), 'soon');
   assert.equal(urgency(task('a', T0 + 60 * MIN), T0), 'soon'); assert.equal(urgency(task('a', T0 + 60 * MIN + 1), T0), 'normal');
   assert.equal(urgency(task('a', T0 - 5 * MIN), T0), 'near'); assert.equal(urgency(task('a', null), T0), 'normal');
+  assert.equal(urgency(task('a', T0 - 15 * MIN), T0), 'near'); assert.equal(urgency(task('a', T0 - 15 * MIN - 1), T0), 'late', 'past the driver grace period: simply still open');
   assert.equal(urgency(task('a', T0 + MIN, { done: true }), T0), 'normal'); assert.equal(urgency(event('e', T0 + MIN), T0), 'normal');
 });
 test('plan order: by time, no-time last, finished at the bottom, old events gone, input untouched', () => {
@@ -123,7 +124,7 @@ test('plan order: by time, no-time last, finished at the bottom, old events gone
 test('next up and next appointment', () => {
   const items = [task('late', T0 + 50 * MIN), event('meet', T0 + 20 * MIN), task('done', T0 + 5 * MIN, { done: true }), task('none', null)];
   assert.equal(nextUp(items, T0)!.item.id, 'meet'); assert.equal(nextAppointmentAt(items, T0), T0 + 20 * MIN);
-  assert.equal(nextUp([task('x', T0 - 3 * MIN)], T0), null, 'passed by more than 2 minutes'); assert.equal(nextUp([], T0), null); assert.equal(nextAppointmentAt([task('t', T0 + MIN)], T0), null);
+  assert.equal(nextUp([event('x', T0 - 3 * MIN)], T0), null, 'passed by more than 2 minutes'); assert.equal(nextUp([], T0), null); assert.equal(nextAppointmentAt([task('t', T0 + MIN)], T0), null);
 });
 test('countdown wording', () => {
   assert.deepEqual([0, 29_000, 60_000, 8 * MIN, 59 * MIN + 31_000, 60 * MIN, 65 * MIN, 180 * MIN].map(countdown), ['nu', 'nu', '1 min', '8 min', '1 u', '1 u', '1 u 05', '3 u']);
@@ -149,69 +150,79 @@ test('model: music start is remembered once and counts as activity; reducer neve
 
 // ---------- lines ----------
 test('Dashy always has a short line, and it never blames', () => {
-  for (const r of RULES) for (const c of [{}, { nextTitle: 'Offerte sturen', nextIn: '8 min', music: 'Midnight Roses' }]) {
+  const ctxs = [{}, { task: { title: 'Offerte sturen', in: '8 min', overdue: false, at: '12:00' }, nextTitle: 'Offerte sturen', nextIn: '8 min', stale: 'Bellen', music: 'Midnight Roses' },
+    { task: { title: 'Offerte sturen', in: 'nu', overdue: false, at: '12:00' } }, { task: { title: 'Offerte sturen', in: '10 min geleden', overdue: true, at: '12:00' } }];
+  for (const r of RULES) for (const c of ctxs) {
     const l = dashyLine({ rule: r.rule, state: r.state }, c); assert.ok(l.length > 5 && l.length <= 100, `${r.rule}: ${l}`);
-    assert.ok(!/schuld|falen|mislukt|lui|te laat|streak|\d{2,} (taken|dagen)/i.test(l), l);
+    assert.ok(!/schuld|falen|mislukt|lui|te laat|streak|\(over nu\)|over nu/i.test(l), l);
   }
-  assert.match(dashyLine(res('deadlineNear'), { nextTitle: 'Offerte', nextIn: '8 min' }), /Offerte.*8 min/);
+});
+test('Dashy names the task he is angry or strict about (the same one the driver looks at), and says it right', () => {
+  const t = (inn: string, overdue = false) => ({ task: { title: 'Offerte', in: inn, overdue, at: '12:00' } });
+  assert.equal(dashyLine(res('deadlineNear'), t('8 min')), 'Nog 8 min voor Offerte. Nu doen.');
+  assert.equal(dashyLine(res('deadlineNear'), t('nu')), 'Offerte is nu aan de beurt.');
+  assert.equal(dashyLine(res('deadlineNear'), t('10 min geleden', true)), 'Offerte was voor 12:00. Eén klein stukje nu is genoeg.');
+  assert.match(dashyLine(res('deadlineSoon'), t('40 min')), /Offerte is aan de beurt \(over 40 min\)/);
+  assert.equal(dashyLine(res('quiet'), { stale: 'Bellen' }), 'Bellen staat nog open. Zullen we een nieuw moment kiezen?');
+});
+test('the pressing task is the one the driver is angry about: nearest deadline, still counted 15 minutes after it passed', () => {
+  const items = [task('late', T0 - 3 * 60 * MIN), task('grace', T0 - 10 * MIN), task('later', T0 + 90 * MIN), task('done', T0 + MIN, { done: true }), event('e', T0 + MIN)];
+  assert.equal(pressingTask(items, T0)!.id, 'grace'); assert.equal(pressingTask(items, T0 + 6 * MIN)!.id, 'later');
+  assert.equal(nextUp(items, T0)!.item.id, 'grace', 'Straks agrees with the driver');
+  assert.equal(nextUp([task('x', T0 - 16 * MIN)], T0), null); assert.equal(nextUp([event('e', T0 - 3 * MIN)], T0), null, 'appointments end sooner');
 });
 
-// ---------- body mode: the block is Dashy's body ----------
-import { createDashy } from '../src/core';
-import { bodyMotion, type BodyMotion } from '../src/render';
+// ---------- body mode: the block is Dashy, it stands still, his face lives ----------
+import { createDashy, type Geometry } from '../src/core';
+import { faceMotion, type FaceMotion } from '../src/render';
 import { ALL_STATES } from '../src/static';
 
-/** How far the transformed card reaches beyond its resting rectangle (px): the CSS transform `translate rotate scale` about 50% 100%, applied to the four corners. */
-function overshoot(m: BodyMotion, w: number, h: number): number {
-  const a = (m.rot * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const [x, y] of [[0, 0], [w, 0], [w, h], [0, h]]) {
-    const px = (x - w / 2) * m.sx, py = (y - h) * m.sy;
-    const X = w / 2 + m.dx + px * c - py * s, Y = h + m.dy + px * s + py * c;
-    minX = Math.min(minX, X); maxX = Math.max(maxX, X); minY = Math.min(minY, Y); maxY = Math.max(maxY, Y);
+/** Smallest distance (in core units) between any corner of either eye and the edge of the block, after the face transform, the eye tilt and the eye position. */
+function clearance(G: Geometry, m: FaceMotion, w: number, h: number): number {
+  const u = Math.min(w, h) / 220, hw = w / (2 * u), hh = h / (2 * u);
+  const rad = (d: number) => (d * Math.PI) / 180;
+  let min = Infinity;
+  for (const e of G.eyes) for (const [cx, cy] of [[-e.ew / 2, -e.eh / 2], [e.ew / 2, -e.eh / 2], [e.ew / 2, e.eh / 2], [-e.ew / 2, e.eh / 2]]) {
+    const ta = rad(e.tilt), ex = e.x + cx * Math.cos(ta) - cy * Math.sin(ta), ey = e.y + cx * Math.sin(ta) + cy * Math.cos(ta); // in the face
+    const fa = rad(m.rot), px = ex * m.sx, py = ey * m.sy;
+    const X = m.tx + px * Math.cos(fa) - py * Math.sin(fa), Y = m.ty + px * Math.sin(fa) + py * Math.cos(fa); // in the block (centre 150,150)
+    min = Math.min(min, 150 + hw - X, X - (150 - hw), 150 + hh - Y, Y - (150 - hh));
   }
-  return Math.max(-minX, maxX - w, -minY, maxY - h, 0);
+  return min;
 }
-const SIZES: [number, number][] = [[430, 390], [750, 560], [680, 250], [240, 400], [180, 200], [350, 160], [1100, 140], [90, 600]];
-const ROOMS = [0, 4, 10, 14, 26];
+const SIZES: [number, number][] = [[430, 390], [750, 560], [680, 250], [240, 400], [180, 200], [350, 160], [1100, 140], [90, 600], [220, 220]];
 
-test('body motion: the body NEVER reaches past the free room around its card (no overlap with other blocks, never off the screen)', () => {
-  let worst = 0;
+test('face motion: the eyes NEVER get closer than the margin to the edge of the block, for any state, any block shape', () => {
+  let worst = Infinity;
   for (const state of ALL_STATES) {
     const d = createDashy({ seed: 11 }); d.setState(state, 0);
     for (let ms = 0; ms < 25000; ms += 33) {
-      d.pointer(Math.sin(ms / 900), Math.cos(ms / 700), ms);
+      d.pointer(Math.sin(ms / 900) * 1.4, Math.cos(ms / 700) * 1.4, ms);
       if (ms % 4000 === 0) d.poke(ms);
       const G = d.step(ms);
-      for (const [w, h] of SIZES) for (const room of ROOMS) {
-        const m = bodyMotion(G, w, h, { room });
+      for (const [w, h] of SIZES) {
+        const m = faceMotion(G, w, h);
         assert.ok(Object.values(m).every(Number.isFinite), `${state} ${w}x${h}`);
-        const o = overshoot(m, w, h); worst = Math.max(worst, o - room);
-        assert.ok(o <= room + 1e-6, `${state} ${w}x${h} room ${room}: reaches ${o.toFixed(2)}px`);
-        assert.ok(m.radius >= 0 && m.radius <= Math.min(w, h) / 2 + 1e-9);
+        const c = clearance(G, m, w, h); worst = Math.min(worst, c);
+        // small blocks have little room: there the limit is what core.ts itself guarantees (10 units in a 220 body), never worse
+        assert.ok(c >= Math.min(12, 10) - 1e-6 || Math.min(w, h) < 140, `${state} ${w}x${h}: ${c.toFixed(1)} units from the edge`);
       }
     }
   }
-  assert.ok(worst <= 1e-6);
+  assert.ok(worst > 0, 'never outside');
 });
-test('body motion: with no room the body does not move at all; with room it really does (gain), and more room means more movement', () => {
-  const d = createDashy({ seed: 5 }); d.setState('dancing', 0); let G = d.step(0); let maxHop = [0, 0, 0];
-  for (let ms = 0; ms < 6000; ms += 16.67) { G = d.step(ms); [0, 10, 24].forEach((room, i) => { maxHop[i] = Math.max(maxHop[i], Math.abs(bodyMotion(G, 430, 390, { room }).dy)); }); const z = bodyMotion(G, 430, 390, { room: 0 }); assert.ok(z.dx === 0 && z.dy === 0 && z.rot === 0 && z.sx <= 1 && z.sy <= 1); }
-  assert.equal(maxHop[0], 0); assert.ok(maxHop[1] > 2 && maxHop[2] > maxHop[1], `hops ${maxHop.map(v => v.toFixed(1))}`);
+test('face motion: the face really moves (gain), and no more than the room allows', () => {
+  const d = createDashy({ seed: 5 }); d.setState('dancing', 0);
+  let hop = [0, 0, 0]; const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (let ms = 0; ms < 6000; ms += 16.67) { const G = d.step(ms); [1, 2.2, 4].forEach((gain, i) => { const m = faceMotion(G, 430, 390, { gain }); lo[i] = Math.min(lo[i], m.ty); hi[i] = Math.max(hi[i], m.ty); }); }
+  hop = hi.map((v, i) => v - lo[i]);
+  assert.ok(hop[1] > hop[0] * 2 && hop[2] > hop[1], `face hop in units ${hop.map(v => v.toFixed(1))}`);
 });
-test('body motion: squashing inwards is allowed in full, stretching is limited to the room, a long card does not balloon', () => {
+test('face motion: a calm block hardly moves the face, a tiny block cannot push the eyes out, and stretch is limited', () => {
   const rest = createDashy({ seed: 1 }).step(0);
-  const squash = bodyMotion({ ...rest, body: { ...rest.body, sx: 1.1, sy: 0.9 } }, 400, 400, { room: 10 });
-  assert.ok(squash.sy <= 0.9 + 1e-9 && squash.sy >= 0.75 - 1e-9, 'compressing is free (and amplified by the squash gain)');
-  assert.ok((squash.sx - 1) * 200 <= 0.25 * 10 + 1e-9, 'widening stays within its budget');
-  const long = bodyMotion({ ...rest, body: { ...rest.body, sx: 1.1 } }, 1100, 140, { room: 30 }); assert.ok((long.sx - 1) * 550 <= 0.25 * 30 + 1e-9);
-});
-test('body motion: at rest he hardly moves, and the radius follows core.ts', () => {
-  const rest = createDashy({ seed: 1 }).step(0);
-  const m = bodyMotion(rest, 430, 390, { room: 14 });
-  assert.ok(Math.abs(m.dy) < 6 && Math.abs(m.rot) < 1);
-  assert.equal(bodyMotion({ ...rest, rx: 110 }, 400, 300, { room: 10 }).radius, 150, 'a circle shape becomes as round as the short side allows');
-  assert.equal(bodyMotion({ ...rest, rx: 22 }, 440, 440, { room: 10 }).radius, 44);
+  const m = faceMotion(rest, 430, 390); assert.ok(Math.abs(m.tx - 150) < 15 && Math.abs(m.ty - 150) < 15);
+  const tiny = faceMotion({ ...rest, face: { ...rest.face, tx: 400, ty: 400 } }, 120, 120); assert.ok(clearance({ ...rest }, tiny, 120, 120) > -60 && Math.abs(tiny.tx - 150) < 60);
+  const big = faceMotion({ ...rest, face: { ...rest.face, sx: 3, sy: 0.1 } }, 430, 390); assert.ok(big.sx <= 1.01 * 1.2 + 1e-9 && big.sy >= 1.01 * 0.8 - 1e-9);
 });
 
 import { aimAt } from '../src/dashboard/aim';

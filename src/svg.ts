@@ -1,4 +1,4 @@
-import { bodyMotion, layout, type BodyMotionOptions } from './render';
+import { faceMotion, layout, type FaceMotionOptions } from './render';
 import { smallGeometry, SMALL_MAX_PX, type Variant } from './small';
 import { createDashy, type Dashy, type DashyOptions, type DashyState, type Geometry, type Shape } from './core';
 
@@ -12,11 +12,11 @@ export interface MountOptions extends DashyOptions {
   /** 'small' = simpler drawing for 24 to 32 px. 'auto' (default) picks it from the rendered size. */
   variant?: Variant;
   /**
-   * Body mode: `container` itself is Dashy's body (a card). Only the eyes are drawn (an overlay filling the card); the body
-   * movement from core.ts (hop, squash, tilt, shake) is applied to the card's transform, and its corner radius follows the body.
-   * `vars` receives --dbx and --dby (px): how far the body moved, so text on it can ride along.
+   * Body mode: `container` itself is Dashy's body (a block of any shape). It stays exactly where it is: only the eyes are drawn,
+   * as an overlay filling the block, and all the life is in the face (it moves, tilts and squashes inside the block, the eyes look
+   * around and blink). The eyes are guaranteed to stay inside the block.
    */
-  body?: { vars?: HTMLElement; /** px, or a function that is read whenever the size changes */ room?: number | (() => number); gain?: number; squashGain?: number };
+  body?: FaceMotionOptions;
 }
 export interface DashyHandle {
   dashy: Dashy;
@@ -81,30 +81,19 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
   const set = (el: Element, attrs: Record<string, string>) => { for (const k in attrs) el.setAttribute(k, attrs[k]); };
   // body mode: size of the card in px, and px per core unit (the body is 220 units wide in core.ts)
   let W = 0, H = 0, u = 1;
-  let room = 0;
   function measure() {
     W = container.offsetWidth; H = container.offsetHeight;
     if (!W || !H) { W = H = 220; u = 1; } else u = Math.min(W, H) / 220;
-    const r = opts.body?.room;
-    room = typeof r === 'function' ? r() : r ?? 0;
     svg.setAttribute('viewBox', `${f(150 - W / (2 * u))} ${f(150 - H / (2 * u))} ${f(W / u)} ${f(H / u)}`);
-  }
-  function applyBody(G: Geometry) {
-    const m = bodyMotion(G, W, H, { gain: opts.body?.gain, squashGain: opts.body?.squashGain, room });
-    container.style.transformOrigin = '50% 100%';
-    container.style.transform = `translate(${f(m.dx)}px, ${f(m.dy)}px) rotate(${f(m.rot)}deg) scale(${f(m.sx)}, ${f(m.sy)})`;
-    container.style.borderRadius = `${f(m.radius)}px`;
-    const v = opts.body?.vars;
-    if (v) { v.style.setProperty('--dbx', `${f(m.dx)}px`); v.style.setProperty('--dby', `${f(m.dy)}px`); v.style.setProperty('--dbup', f(-m.dy)); }
   }
   function draw(G0: Geometry) {
     const L = layout(small && !bodyMode ? smallGeometry(G0) : G0, small && !bodyMode);
-    if (bodyMode) applyBody(G0);
-    else {
+    if (!bodyMode) {
       outline!.setAttribute('stroke-width', L.outlineWidth); outline!.setAttribute('rx', L.outlineRx); clip!.setAttribute('rx', L.clipRx);
       body!.setAttribute('transform', L.body);
     }
-    face.setAttribute('transform', L.face);
+    if (bodyMode) { const m = faceMotion(G0, W, H, opts.body); face.setAttribute('transform', `translate(${f(m.tx)} ${f(m.ty)}) rotate(${f(m.rot)}) scale(${f(m.sx)} ${f(m.sy)})`); }
+    else face.setAttribute('transform', L.face);
     L.eyes.forEach((e, i) => {
       const E = eyes[i];
       E.g.setAttribute('transform', e.group); set(E.pill, e.pill); set(E.lid, e.lid); set(E.low, e.low);
@@ -145,8 +134,8 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
   };
   const onDown = () => { if (!reduced()) { dashy.poke(now()); setTitle(); } };
   // body mode: a tap on the body (not on a button or link on top of it) is a poke
-  const pokeTarget: HTMLElement | SVGSVGElement = bodyMode ? (opts.body!.vars ?? container) : svg;
-  const onTap = (e: Event) => { if (bodyMode && !container.contains(e.target as Node)) return; onDown(); }; // body mode: only a tap on the body itself startles him
+  const pokeTarget: HTMLElement | SVGSVGElement = bodyMode ? container : svg;
+  const onTap = () => onDown();
   window.addEventListener('pointermove', onMove, { passive: true });
   pokeTarget.addEventListener('pointerdown', onTap);
   const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -173,7 +162,6 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
       document.removeEventListener('visibilitychange', onVisibility); io?.disconnect(); ro?.disconnect();
       window.removeEventListener('pointermove', onMove); mq?.removeEventListener('change', applyMotionPreference);
       pokeTarget.removeEventListener('pointerdown', onTap);
-      if (bodyMode) { container.style.transform = ''; container.style.transformOrigin = ''; container.style.borderRadius = ''; opts.body!.vars?.style.removeProperty('--dbx'); opts.body!.vars?.style.removeProperty('--dby'); opts.body!.vars?.style.removeProperty('--dbup'); }
       svg.remove();
     },
   };

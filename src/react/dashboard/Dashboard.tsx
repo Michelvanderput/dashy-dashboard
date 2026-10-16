@@ -3,13 +3,13 @@ import { chooseAttention } from '../../dashboard/attention';
 import { aimAt } from '../../dashboard/aim';
 import { BLOCKS, tracksFor, type BlockId } from '../../dashboard/layout';
 import { dashyLine } from '../../dashboard/lines';
-import { clock, countdown, nextAppointmentAt, nextUp, planOrder, urgency, type PlanItem } from '../../dashboard/plan';
+import { clock, countdown, nextAppointmentAt, nextUp, planOrder, pressingTask, urgency, type PlanItem } from '../../dashboard/plan';
 import type { DashyState } from '../../core';
 import type { Resolution } from '../../driver';
 import { musicState, type NowPlaying } from '../../spotify/model';
 import type { SpotifyStatus } from '../../spotify/session';
 import { NowPlayingBlock } from '../NowPlayingBlock';
-import { useFocus, useOrientation } from './hooks';
+import { useFocus, useOrientation, useWakeLock } from './hooks';
 import { useDashyBody } from './useDashyBody';
 import { CSS } from './styles';
 
@@ -26,6 +26,12 @@ export interface DashboardProps {
   line?: string;
   music: DashboardMusic;
   onToggleDone?: (id: string, done: boolean) => void;
+  /** Text for an empty planning. Default: "Een lege dag. Voeg iets kleins toe." */
+  emptyText?: string;
+  /** Dark and dimmed (for the night, a phone on the charger). */
+  night?: boolean;
+  /** Keep the screen awake while the dashboard is visible (a phone on the charger). Default false. */
+  keepAwake?: boolean;
   /** Working day for the day bar. Default 8 to 18. */
   workday?: { startHour: number; endHour: number };
   /** Reports the block in focus (or null) and why. */
@@ -42,19 +48,13 @@ const Chevrons = () => (
 );
 
 /**
- * Dashy lives on the page, without a card behind him: his white body is the block. There is air above him and beside him
- * and a floor below, and he moves in that space the way core.ts moves a body (breathing, hopping, squashing, tilting, shaking).
- * His body is guaranteed to stay inside that open space, so it never touches another block. He looks at the block that
- * needs attention; a tap on his body startles him, a tap beside him makes his block grow.
+ * Dashy IS the block: the white block is his body and it stays exactly where it is, like every other block. All the life is
+ * in his face: the eyes look around, blink and take his mood, and the face moves, tilts and squashes inside the block (never
+ * outside it). He looks at the block that needs attention; a tap on him startles him.
  */
 function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why }: { state: DashyState; focus: boolean; attn: boolean; onToggle: (b: BlockId) => void; lookAt: BlockId | null; rootRef: RefObject<HTMLElement | null>; say: string; why: string }) {
-  const section = useRef<HTMLElement>(null), card = useRef<HTMLDivElement>(null);
-  // free room around the body: the smallest of the air above, beside and below it (measured, never guessed)
-  const room = () => {
-    const sec = section.current, c = card.current; if (!sec || !c) return 0;
-    return 0.85 * Math.max(0, Math.min(c.offsetTop, (sec.offsetWidth - c.offsetWidth) / 2, sec.offsetHeight - c.offsetTop - c.offsetHeight));
-  };
-  const { look } = useDashyBody(card, section, state, { room });
+  const section = useRef<HTMLElement>(null), face = useRef<HTMLDivElement>(null);
+  const { look } = useDashyBody(face, state);
   useEffect(() => {
     if (!lookAt) return;
     const aim = () => {
@@ -67,13 +67,11 @@ function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why }: 
     return () => clearInterval(t);
   }, [lookAt, rootRef]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <section ref={section} className="db-block db-bodyblock" data-block="dashy" data-focus={focus} data-attn={attn} aria-labelledby="db-title-dashy" style={{ ['--area' as string]: 'dashy' }}
-      onClick={e => { if (!(e.target as Element).closest(`${INTERACTIVE}, .db-bodycard`)) onToggle('dashy'); }}>
+    <section ref={section} className="db-block db-bodyblock" data-block="dashy" data-focus={focus} data-attn={attn} aria-labelledby="db-title-dashy" style={{ ['--area' as string]: 'dashy' }}>
+      <div ref={face} className="db-face" />
       <h2 className="db-sr" id="db-title-dashy">{TITLES.dashy}</h2>
       <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES.dashy}` : `Vergroot ${TITLES.dashy}`} onClick={() => onToggle('dashy')}><Chevrons /></button>
-      <div className="db-floor" aria-hidden="true" />
-      <div ref={card} className="db-bodycard" />
-      <div className="db-say"><p className="db-line">{say}</p><p className="db-why">{why}</p></div>
+      <div className="db-body"><div className="db-say"><p className="db-line">{say}</p><p className="db-why">{why}</p></div></div>
     </section>
   );
 }
@@ -97,7 +95,7 @@ function Block({ id, focus, attn, onToggle, children }: { id: BlockId; focus: bo
  * (a deadline, an appointment, Dashy asking for help, new music) the grid tracks grow so that block takes about half the
  * screen, animated by the browser itself; the content simply reflows. Tap a block's button to grow it yourself (Esc lets go).
  */
-export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
+export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
   const root = useRef<HTMLElement>(null);
   const orientation = useOrientation(root);
 
@@ -109,9 +107,12 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
 
   const plan = useMemo(() => planOrder(items, now), [items, now]);
   const next = nextUp(items, now);
+  const late = plan.find(i => i.kind === 'task' && !i.done && urgency(i, now) === 'late') ?? null; // open, long past its deadline: named, never blamed
+  const stale = next ? null : late; // Straks shows it only when nothing else is coming up
   const candidate = chooseAttention({ now, resolution, nextEventAt: nextAppointmentAt(items, now), musicSince });
   const { focus, toggle, release } = useFocus(candidate, now);
 
+  useWakeLock(keepAwake);
   const [announce, setAnnounce] = useState('');
   useEffect(() => {
     onFocusChange?.(focus.block, focus.reason);
@@ -121,7 +122,11 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   const t = tracksFor(orientation, focus.block);
   const nextIn = next ? countdown(next.at - now) : undefined;
   const dashyState = state ?? musicState(resolution, playing);
-  const dashyText = line ?? dashyLine(resolution, { nextTitle: next?.item.title, nextIn, music: playing ? np!.title : undefined });
+  const press = pressingTask(items, now);
+  const dashyText = line ?? dashyLine(resolution, {
+    task: press ? { title: press.title, in: countdown(press.at! - now), overdue: press.at! < now - 60_000, at: clock(press.at!) } : undefined,
+    nextTitle: next?.item.title, nextIn, stale: late?.title, music: playing ? np!.title : undefined,
+  });
 
   const d = new Date(now), minutes = d.getHours() * 60 + d.getMinutes();
   const span = (workday.endHour - workday.startHour) * 60, done = Math.min(1, Math.max(0, (minutes - workday.startHour * 60) / span));
@@ -135,9 +140,10 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   const big = next ? (() => { const m = Math.round((next.at - now) / 60_000); return m >= 60 ? { n: `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`, u: 'u' } : m < 1 ? { n: 'nu', u: '' } : { n: String(Math.max(0, m)), u: 'min' }; })() : null;
 
   return (
-    <main ref={root} className={`db${className ? ' ' + className : ''}`} aria-label="Dashy" onKeyDown={onKey} data-orientation={orientation} data-focus={focus.block ?? 'none'}
+    <main ref={root} className={`db${className ? ' ' + className : ''}`} aria-label="Dashy" onKeyDown={onKey} data-orientation={orientation} data-focus={focus.block ?? 'none'} data-night={night} data-theme={night ? 'dark' : undefined}
       style={{ ['--areas' as string]: t.areas, ['--cols' as string]: t.cols, ['--rows' as string]: t.rows, ...style }}>
       <style>{CSS}</style>
+      <h1 className="db-sr">Dashy: je dag in één oogopslag</h1>
       <div className="db-sr" role="status" aria-live="polite">{announce}</div>
 
       {BLOCKS.map(id => id === 'dashy' ? (
@@ -150,6 +156,9 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
                 <p className="db-big">{big.n}{big.u && <small>{big.u}</small>}</p>
                 <p className="db-what">{next.item.title}</p>
                 <p className="db-when">{next.item.kind === 'event' ? 'Afspraak' : 'Deadline'} om {clock(next.at)}</p>
+              </>) : stale ? (<>
+                <p className="db-what">{stale.title}</p>
+                <p className="db-when">Nog open{stale.at !== null ? `, was ${clock(stale.at)}` : ''}</p>
               </>) : <p className="db-empty">Niets gepland.</p>}
               <ul className="db-more">{plan.filter(i => !i.done && i.at !== null && i.id !== next?.item.id).slice(0, 3).map(i => <li key={i.id}>{clock(i.at!)} · {i.title}</li>)}</ul>
               <p className="db-why">{focus.block === 'now' ? focus.reason : ''}</p>
@@ -158,14 +167,14 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
           {id === 'plan' && (
             <>
               <ul className="db-plan" aria-label="Planning van vandaag">
-                {plan.length === 0 && <li className="db-empty">Een lege dag. Voeg iets kleins toe.</li>}
+                {plan.length === 0 && <li className="db-empty">{emptyText}</li>}
                 {plan.map(i => (
                   <li key={i.id} className="db-item" data-kind={i.kind} data-done={!!i.done} data-urgency={urgency(i, now)}>
                     {i.kind === 'task'
                       ? <button type="button" className="db-check" role="checkbox" aria-checked={!!i.done} aria-label={`${i.title}: markeer als ${i.done ? 'niet klaar' : 'klaar'}`} onClick={() => onToggleDone?.(i.id, !i.done)}><i /></button>
                       : <span aria-hidden="true" />}
                     <span className="db-name">{i.title}{i.kind === 'event' && <span className="db-sr"> (afspraak)</span>}</span>
-                    <span className="db-time">{i.at !== null ? (i.done ? '' : clock(i.at)) : ''}</span>
+                    <span className="db-time">{i.at !== null ? (i.done ? '' : urgency(i, now) === 'late' ? 'nog open' : clock(i.at)) : ''}</span>
                     {i.note && <span className="db-note">{i.note}</span>}
                   </li>
                 ))}

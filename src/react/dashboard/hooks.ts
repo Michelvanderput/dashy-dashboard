@@ -42,3 +42,19 @@ export function useFocus(candidate: Candidate | null, now: number) {
     release: () => setPin(null),
   };
 }
+
+/**
+ * Keeps the screen awake while the page is visible (a phone on the charger should not go dark). Does nothing where the
+ * Screen Wake Lock API does not exist, and never throws: the browser may refuse (low battery, power saver).
+ */
+export function useWakeLock(enabled: boolean) {
+  useEffect(() => {
+    const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } }) : null;
+    if (!enabled || !nav?.wakeLock) return;
+    let lock: { release: () => Promise<void> } | null = null, stopped = false;
+    const take = async () => { if (stopped || document.hidden || lock) return; try { const l = await nav.wakeLock!.request('screen'); if (stopped) { void l.release().catch(() => {}); return; } lock = l; } catch { /* refused: fine */ } };
+    const onVis = () => { if (!document.hidden) void take(); else lock = null; }; // the browser drops the lock when the page is hidden
+    void take(); document.addEventListener('visibilitychange', onVis);
+    return () => { stopped = true; document.removeEventListener('visibilitychange', onVis); void lock?.release().catch(() => {}); lock = null; };
+  }, [enabled]);
+}

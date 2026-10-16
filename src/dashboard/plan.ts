@@ -2,13 +2,15 @@
 import { initialDriverState, reduce, type DriverState } from '../driver';
 
 export interface PlanItem { id: string; kind: 'task' | 'event'; title: string; /** start (event) or deadline (task), ms epoch */ at: number | null; endsAt?: number | null; done?: boolean; note?: string }
-export type Urgency = 'near' | 'soon' | 'normal';
+/** `late` = open and more than 15 minutes past its deadline: it is simply still open (the driver stops nagging then too). */
+export type Urgency = 'near' | 'soon' | 'late' | 'normal';
 
 export const URGENT = { nearMs: 15 * 60_000, soonMs: 60 * 60_000 } as const;
 
 export function urgency(item: PlanItem, now: number): Urgency {
   if (item.kind !== 'task' || item.done || item.at === null) return 'normal';
   const left = item.at - now;
+  if (left < -URGENT.nearMs) return 'late';
   return left <= URGENT.nearMs ? 'near' : left <= URGENT.soonMs ? 'soon' : 'normal';
 }
 
@@ -19,13 +21,24 @@ export function planOrder(items: readonly PlanItem[], now: number): PlanItem[] {
     .sort((a, b) => key(a) - key(b) || (a.at ?? Infinity) - (b.at ?? Infinity) || a.title.localeCompare(b.title));
 }
 
-/** The next thing that happens: the earliest open appointment or task deadline that has not passed by more than 2 minutes. */
+/**
+ * The next thing that happens: the earliest open appointment or task deadline. An appointment counts until 2 minutes after its
+ * start; a task deadline until 15 minutes after, the same period in which the state driver is still angry about it.
+ */
 export function nextUp(items: readonly PlanItem[], now: number): { item: PlanItem; at: number } | null {
   let best: { item: PlanItem; at: number } | null = null;
   for (const item of items) {
-    if (item.done || item.at === null || item.at < now - 2 * 60_000) continue;
+    const grace = item.kind === 'task' ? URGENT.nearMs : 2 * 60_000;
+    if (item.done || item.at === null || item.at < now - grace) continue;
     if (!best || item.at < best.at) best = { item, at: item.at };
   }
+  return best;
+}
+
+/** The open task the state driver is looking at: the earliest deadline that has not been over for more than 15 minutes. */
+export function pressingTask(items: readonly PlanItem[], now: number): PlanItem | null {
+  let best: PlanItem | null = null;
+  for (const i of items) if (i.kind === 'task' && !i.done && i.at !== null && i.at >= now - URGENT.nearMs && (best === null || i.at < best.at!)) best = i;
   return best;
 }
 export const nextAppointmentAt = (items: readonly PlanItem[], now: number): number | null => {

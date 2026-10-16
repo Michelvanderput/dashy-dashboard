@@ -9,7 +9,8 @@ export interface PlanItem {
     done?: boolean;
     note?: string;
 }
-export type Urgency = 'near' | 'soon' | 'normal';
+/** `late` = open and more than 15 minutes past its deadline: it is simply still open (the driver stops nagging then too). */
+export type Urgency = 'near' | 'soon' | 'late' | 'normal';
 export declare const URGENT: {
     readonly nearMs: number;
     readonly soonMs: number;
@@ -17,11 +18,16 @@ export declare const URGENT: {
 export declare function urgency(item: PlanItem, now: number): Urgency;
 /** Open items by time (items without a time last), finished tasks at the bottom. Does not mutate. */
 export declare function planOrder(items: readonly PlanItem[], now: number): PlanItem[];
-/** The next thing that happens: the earliest open appointment or task deadline that has not passed by more than 2 minutes. */
+/**
+ * The next thing that happens: the earliest open appointment or task deadline. An appointment counts until 2 minutes after its
+ * start; a task deadline until 15 minutes after, the same period in which the state driver is still angry about it.
+ */
 export declare function nextUp(items: readonly PlanItem[], now: number): {
     item: PlanItem;
     at: number;
 } | null;
+/** The open task the state driver is looking at: the earliest deadline that has not been over for more than 15 minutes. */
+export declare function pressingTask(items: readonly PlanItem[], now: number): PlanItem | null;
 export declare const nextAppointmentAt: (items: readonly PlanItem[], now: number) => number | null;
 /** "nu", "8 min", "1 u 05", "3 u". Past times: "nu" for the first minutes, then "5 min geleden". */
 export declare function countdown(ms: number): string;

@@ -13,3 +13,8 @@ export declare function useFocus(candidate: Candidate | null, now: number): {
     toggle: (b: BlockId) => void;
     release: () => void;
 };
+/**
+ * Keeps the screen awake while the page is visible (a phone on the charger should not go dark). Does nothing where the
+ * Screen Wake Lock API does not exist, and never throws: the browser may refuse (low battery, power saver).
+ */
+export declare function useWakeLock(enabled: boolean): void;

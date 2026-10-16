@@ -39,19 +39,19 @@ const CSS = `
  background:color-mix(in srgb,var(--vinyl) 9%,#f6f5f1);color:#16181a;font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
 @media (prefers-color-scheme:dark){.dnp{background:color-mix(in srgb,var(--vinyl) 16%,#17181a);color:#f1f0ec}}
 .dnp-bare{padding:0;border-radius:0;background:none;overflow:visible;gap:12px 24px;font-family:inherit}
-.dnp-bare .dnp-title{font-size:1.1em;font-weight:500;letter-spacing:-.02em}
-.dnp-bare .dnp-artist{font-size:.92em}
+.dnp-bare .dnp-title{font-size:1.1em;font-weight:500;letter-spacing:-.02em;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.dnp-bare .dnp-artist{font-size:.92em;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
 .dnp-bare .dnp-note{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .dnp-bare .dnp-bar{height:2px;margin-top:16px}
 .dnp-bare .dnp-bar>i{background:currentColor;opacity:.7}
-.dnp-bare .dnp-time{font-size:.75em;opacity:.6}
+.dnp-bare .dnp-time{font-size:.85em;opacity:.7}
 .dnp-bare .dnp-btn{border:0;padding:0 2px;min-height:44px;opacity:.7;text-decoration:underline;text-underline-offset:4px;text-decoration-color:rgba(127,127,127,.5)}
 .dnp-bare .dnp-btn:hover{background:none;opacity:1}
-.dnp-bare .dnp-link{font-size:.72em;letter-spacing:.06em;opacity:.7}
+.dnp-bare .dnp-link{font-size:.82em;letter-spacing:.05em;opacity:.8}
 .dnp-stage{position:relative;flex:none;width:calc(var(--s)*1.72);height:var(--s)}
 .dnp-sleeve{position:absolute;left:0;top:0;width:var(--s);height:var(--s);z-index:2;background:#fff;border-radius:var(--rc,4px);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.18),0 14px 24px -16px rgba(0,0,0,.4)}
 .dnp-sleeve img{display:block;width:100%;height:100%;object-fit:contain}
-.dnp-blank{display:grid;place-items:center;width:100%;height:100%;background:#e4e2db;color:#9a998f}
+.dnp-blank{display:grid;place-items:center;width:100%;height:100%;background:#e4e2db;color:#7d7c73}
 .dnp-vinyl{position:absolute;left:0;top:calc(var(--s)*.03);width:calc(var(--s)*.94);height:calc(var(--s)*.94);z-index:1;transform:translateX(var(--out,20%));transition:transform .7s cubic-bezier(.3,.9,.3,1)}
 .dnp[data-playing="true"]{--out:80%}.dnp[data-paused="true"]{--out:62%}
 .dnp-disc{position:relative;width:100%;height:100%;border-radius:50%;background:var(--vinyl);box-shadow:0 10px 20px -12px rgba(0,0,0,.45)}
@@ -71,7 +71,7 @@ const CSS = `
 .dnp-time{display:flex;justify-content:space-between;margin-top:4px;font-size:.8em;opacity:.65;font-variant-numeric:tabular-nums}
 .dnp-link,.dnp-btn{font:inherit;color:inherit}
 .dnp-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:12px}
-.dnp-link{font-size:.85em;opacity:.8}
+.dnp-link{display:inline-flex;align-items:center;min-height:44px;font-size:.85em;opacity:.8}
 .dnp-btn{padding:10px 16px;min-height:44px;border-radius:999px;border:1.5px solid currentColor;background:transparent;cursor:pointer}
 .dnp-btn:hover{background:rgba(127,127,127,.15)}.dnp-btn:focus-visible,.dnp-link:focus-visible{outline:3px solid var(--vinyl);outline-offset:2px}
 .dnp-note{margin:6px 0 0;opacity:.75}

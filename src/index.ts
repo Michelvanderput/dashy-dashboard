@@ -8,5 +8,5 @@ export { smallGeometry, SMALL_MAX_PX } from './small';
 export type { Variant } from './small';
 export { ALL_STATES, renderSvg, settledGeometry, stillGeometry } from './static';
 export type { StaticOptions } from './static';
-export { bodyMotion } from './render';
-export type { BodyMotion, BodyMotionOptions } from './render';
+export { faceMotion } from './render';
+export type { FaceMotion, FaceMotionOptions } from './render';

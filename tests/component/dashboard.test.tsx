@@ -149,63 +149,115 @@ describe('<Dashboard />', () => {
   });
 });
 
-describe("Dashy's block is his body", () => {
-  const card = (c: HTMLElement) => c.querySelector('.db-bodycard') as HTMLElement;
+describe('Dashy IS the block: it stands still, his face lives', () => {
+  const face = (c: HTMLElement) => c.querySelector('.db-face') as HTMLElement;
   const wait = (ms: number) => act(async () => { await new Promise(r => setTimeout(r, ms)); });
 
-  it('the white card carries his eyes, and screen readers get his state as a label', () => {
+  it('the white block carries his eyes, and screen readers get his state as a label', () => {
     const { container } = render(<Dashboard {...base()} />);
-    expect(card(container).querySelector('svg[role="img"] title')!.textContent).toBe('Dashy wacht rustig');
-    expect(card(container).querySelector('svg')!.getAttribute('style')).toMatch(/pointer-events:none/); // taps reach the body, not the drawing
-    expect(card(container).querySelectorAll('mask')).toHaveLength(2);
+    expect(face(container).querySelector('svg[role="img"] title')!.textContent).toBe('Dashy wacht rustig');
+    expect(face(container).querySelector('svg')!.getAttribute('style')).toMatch(/pointer-events:none/);
+    expect(face(container).querySelectorAll('mask')).toHaveLength(2);
+    expect(block(container, 'dashy').className).toContain('db-bodyblock');
   });
 
-  it('the card moves the way core.ts moves a body, and the text on it follows the shift', async () => {
+  it('the block itself never moves: no transform on the block or on his face host, however long he lives', async () => {
+    const { container } = render(<Dashboard {...base({ resolution: res('done'), music: { nowPlaying: track, status: 'connected' } })} />);
+    await wait(300);
+    for (const el of [block(container, 'dashy'), face(container)]) { expect(el.style.transform).toBe(''); expect(el.style.getPropertyValue('--dbx')).toBe(''); }
+  });
+
+  it('his face moves inside the block: the face group gets a transform that changes with his mood', async () => {
     const { container } = render(<Dashboard {...base({ resolution: res('done') })} />);
-    await wait(120);
-    const c = card(container);
-    expect(c.style.transform).toMatch(/translate\(.+px, .+px\) rotate\(.+deg\) scale\(.+, .+\)/);
-    expect(c.style.transformOrigin).toBe('50% 100%');
-    expect(c.style.borderRadius).toMatch(/px$/);
-    const section = block(container, 'dashy');
-    expect(section.style.getPropertyValue('--dbx')).toMatch(/px$/); expect(section.style.getPropertyValue('--dby')).toMatch(/px$/);
+    await wait(60);
+    const g = face(container).querySelector('g.face')!;
+    const first = g.getAttribute('transform'); expect(first).toMatch(/^translate\(.+\) rotate\(.+\) scale\(.+\)$/);
+    await wait(250); expect(g.getAttribute('transform')).not.toBe(first);
   });
 
-  it('reduced motion: the card is placed once and does not move', async () => {
+  it('reduced motion: the face is placed once and does not move', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce'), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false, onchange: null }));
     const { container } = render(<Dashboard {...base({ resolution: res('done') })} />);
-    const first = card(container).style.transform; expect(first).not.toBe('');
-    await wait(200); expect(card(container).style.transform).toBe(first);
+    const g = face(container).querySelector('g.face')!; const first = g.getAttribute('transform'); expect(first).not.toBeNull();
+    await wait(250); expect(g.getAttribute('transform')).toBe(first);
     vi.unstubAllGlobals();
   });
 
-  it('a tap on his body startles him (four taps make him angry); a tap on a button or beside him does not', () => {
+  it('a tap on him startles him (four taps make him angry); a tap on a button does not', () => {
     const { container } = render(<Dashboard {...base()} />);
     const toggle = screen.getByRole('button', { name: 'Vergroot Dashy' });
     for (let i = 0; i < 6; i++) fireEvent.pointerDown(toggle);
-    for (let i = 0; i < 6; i++) fireEvent.pointerDown(block(container, 'dashy')); // beside the body, on his open space
     expect(dashyLabel(container)).toBe('Dashy wacht rustig');
-    for (let i = 0; i < 4; i++) fireEvent.pointerDown(card(container));
+    for (let i = 0; i < 4; i++) fireEvent.pointerDown(face(container));
     expect(dashyLabel(container)).toBe('Dashy is boos');
   });
 
-  it('a tap beside him makes his block grow (a tap on his body does not)', () => {
-    const { container } = render(<Dashboard {...base()} />);
-    fireEvent.click(card(container)); expect(root(container).dataset.focus).toBe('none');
-    fireEvent.click(block(container, 'dashy')); expect(root(container).dataset.focus).toBe('dashy');
-  });
-
-  it('he has no card behind him: the block is open space with a floor, and his body is a square with air around it', () => {
-    const { container } = render(<Dashboard {...base()} />);
+  it('he is a block like the others: same grid area logic, grows when he needs attention, white with dark text', () => {
+    const { container } = render(<Dashboard {...base({ resolution: res('deadlineNear') })} />);
+    expect(block(container, 'dashy').dataset.focus).toBe('true');
     const css = container.querySelector('style')!.textContent!;
-    expect(css).toMatch(/\.db-bodyblock[^{]*\{[^}]*background:none/);
-    expect(css).toMatch(/\.db-bodycard\{[^}]*width:var\(--body\);height:var\(--body\)/); // a square, not a slab
-    expect(block(container, 'dashy').querySelector('.db-floor')).not.toBeNull();
+    expect(css).toMatch(/\.db-bodyblock[^{]*\{[^}]*background:#fff/);
+    expect(css).not.toMatch(/\.db-bodycard|\.db-floor/);
   });
 
-  it('unmounting gives the card back (no leftover transform, no running loop)', () => {
+  it('unmounting gives the host back (no drawing left, no running loop)', () => {
     const { container, unmount } = render(<Dashboard {...base()} />);
-    const c = card(container); unmount();
-    expect(c.style.transform).toBe(''); expect(c.querySelector('svg')).toBeNull();
+    const f = face(container); unmount(); expect(f.querySelector('svg')).toBeNull();
+  });
+});
+
+describe('a phone on the charger, and a real day', () => {
+  it('keeps the screen awake while visible, asks again when it comes back, lets go on unmount, and copes without the API', async () => {
+    const release = vi.fn(async () => {}), request = vi.fn(async () => ({ release }));
+    vi.stubGlobal('navigator', { ...navigator, wakeLock: { request } });
+    const { unmount } = render(<Dashboard {...base()} keepAwake />);
+    await act(async () => { await Promise.resolve(); });
+    expect(request).toHaveBeenCalledTimes(1); expect(request).toHaveBeenCalledWith('screen');
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true }); act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true }); await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await Promise.resolve(); });
+    expect(request).toHaveBeenCalledTimes(2);
+    unmount(); expect(release).toHaveBeenCalled();
+    cleanup(); request.mockClear();
+    render(<Dashboard {...base()} />); expect(request).not.toHaveBeenCalled(); // off by default
+    cleanup(); vi.stubGlobal('navigator', { ...navigator, wakeLock: { request: async () => { throw new Error('low battery'); } } });
+    expect(() => render(<Dashboard {...base()} keepAwake />)).not.toThrow();
+    cleanup(); vi.stubGlobal('navigator', { ...navigator, wakeLock: undefined });
+    expect(() => render(<Dashboard {...base()} keepAwake />)).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+
+  it('night: dark and dimmed', () => {
+    const { container } = render(<Dashboard {...base()} night />);
+    expect(root(container).dataset.night).toBe('true'); expect(root(container).dataset.theme).toBe('dark');
+    expect(container.querySelector('style')!.textContent).toMatch(/\.db\[data-night="true"\]\{filter:brightness\(\.62\)\}/);
+    cleanup(); const day = render(<Dashboard {...base()} />); expect(root(day.container).dataset.theme).toBeUndefined();
+  });
+
+  it('an empty planning says what the caller wants (so real mode never pretends)', () => {
+    render(<Dashboard {...base({ items: [] })} emptyText="Taken verschijnen hier zodra ze gekoppeld zijn." />);
+    expect(screen.getByText('Taken verschijnen hier zodra ze gekoppeld zijn.')).toBeTruthy();
+  });
+
+  it('Dashy talks about the task he is angry about, even when another one comes next', () => {
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Offerte sturen', at: T0 - 10 * MIN }, { id: 'b', kind: 'task', title: 'Rapport nakijken', at: T0 + 109 * MIN }];
+    const { container } = render(<Dashboard {...base({ items: items2, resolution: res('deadlineNear') })} />);
+    expect(container.querySelector('.db-line')!.textContent).toBe('Offerte sturen was voor 13:50. Eén klein stukje nu is genoeg.'.replace('13:50', new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: false }).format(T0 - 10 * MIN)));
+    expect(container.querySelector('.db-now')!.textContent).toContain('Offerte sturen'); // Straks agrees
+  });
+
+  it('a task that stayed open long past its deadline is named neutrally, never in alarm colours', () => {
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Bellen', at: T0 - 3 * 60 * MIN }];
+    const { container } = render(<Dashboard {...base({ items: items2, resolution: res('quiet') })} />);
+    expect(container.querySelector('.db-item')!.getAttribute('data-urgency')).toBe('late');
+    expect(container.querySelector('.db-time')!.textContent).toBe('nog open');
+    expect(container.querySelector('.db-now')!.textContent).toContain('Nog open');
+    expect(container.querySelector('.db-line')!.textContent).toBe('Bellen staat nog open. Zullen we een nieuw moment kiezen?');
+  });
+
+  it('...also when something else is coming up: the open task is not forgotten', () => {
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Bellen', at: T0 - 3 * 60 * MIN }, { id: 'b', kind: 'task', title: 'Rapport', at: T0 + 100 * MIN }];
+    const { container } = render(<Dashboard {...base({ items: items2, resolution: res('quiet') })} />);
+    expect(container.querySelector('.db-line')!.textContent).toBe('Bellen staat nog open. Zullen we een nieuw moment kiezen?');
+    expect(container.querySelector('.db-now')!.textContent).toContain('Rapport'); // Straks still shows what comes next
   });
 });

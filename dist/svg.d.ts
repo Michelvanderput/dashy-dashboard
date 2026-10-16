@@ -1,3 +1,4 @@
+import { type FaceMotionOptions } from './render';
 import { type Variant } from './small';
 import { type Dashy, type DashyOptions, type DashyState, type Shape } from './core';
 export interface MountOptions extends DashyOptions {
@@ -10,16 +11,11 @@ export interface MountOptions extends DashyOptions {
     /** 'small' = simpler drawing for 24 to 32 px. 'auto' (default) picks it from the rendered size. */
     variant?: Variant;
     /**
-     * Body mode: `container` itself is Dashy's body (a card). Only the eyes are drawn (an overlay filling the card); the body
-     * movement from core.ts (hop, squash, tilt, shake) is applied to the card's transform, and its corner radius follows the body.
-     * `vars` receives --dbx and --dby (px): how far the body moved, so text on it can ride along.
+     * Body mode: `container` itself is Dashy's body (a block of any shape). It stays exactly where it is: only the eyes are drawn,
+     * as an overlay filling the block, and all the life is in the face (it moves, tilts and squashes inside the block, the eyes look
+     * around and blink). The eyes are guaranteed to stay inside the block.
      */
-    body?: {
-        vars?: HTMLElement; /** px, or a function that is read whenever the size changes */
-        room?: number | (() => number);
-        gain?: number;
-        squashGain?: number;
-    };
+    body?: FaceMotionOptions;
 }
 export interface DashyHandle {
     dashy: Dashy;

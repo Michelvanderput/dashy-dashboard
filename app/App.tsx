@@ -26,9 +26,13 @@ export function App() {
   const remoteOn = !!env.VITE_DASHY_STATE_URL && !!env.VITE_DASHY_STATE_TOKEN;
   const remote = useRemoteDashy({ url: env.VITE_DASHY_STATE_URL ?? '', token: env.VITE_DASHY_STATE_TOKEN ?? '', enabled: remoteOn });
 
+  // Real mode (the MCP state is configured): never show the invented demo day. Dashy follows the server; the lists stay empty
+  // until a real source for titles and appointments is connected.
   const local = resolve(model.driver, now);
   const useRemote = remoteOn && remote.source !== 'fallback';
-  const resolution = useRemote ? fromRemote(remote.state, remote.rule) : local;
+  const resolution = remoteOn ? (useRemote ? fromRemote(remote.state, remote.rule) : fromRemote('idle', 'idle')) : local;
+  const items = remoteOn ? [] : model.items;
+  const hour = new Date(now).getHours(), night = hour >= 22 || hour < 7;
   const line = useRemote && remote.source === 'claude' ? remote.line : undefined;
 
   const nowPlaying = spotifyId ? sp.nowPlaying : demoMusic ? demoTrack(now, true, track) : null;
@@ -48,11 +52,11 @@ export function App() {
   return (
     <>
       <Dashboard
-        now={now} items={model.items} resolution={resolution} line={line}
+        now={now} items={items} resolution={resolution} line={line} night={night} keepAwake emptyText={remoteOn ? 'Taken en afspraken verschijnen hier zodra ze gekoppeld zijn.' : undefined}
         music={{ nowPlaying, status: spotifyId ? sp.status : 'connected', onConnect: spotifyId ? sp.connect : undefined, onDisconnect: spotifyId ? sp.disconnect : undefined, error: sp.error, spotifyLogoSrc: env.VITE_SPOTIFY_LOGO }}
         onToggleDone={(id, done) => dispatch({ type: done ? 'done' : 'undo', id })}
       />
-      {!useRemote && <DemoPanel a={actions} />}
+      {!remoteOn && <DemoPanel a={actions} />}
     </>
   );
 }

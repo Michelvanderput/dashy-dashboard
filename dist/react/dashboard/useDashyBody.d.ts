@@ -1,13 +1,9 @@
 import { type RefObject } from 'react';
 import type { DashyState } from '../../core';
 /**
- * Makes the `card` element Dashy's body. His eyes are drawn on it, and the movement from core.ts (hop, squash, tilt, shake)
- * is applied to the card. `vars` gets --dbx/--dby so content on top can ride along with the body.
+ * Makes the `host` element Dashy's body: it stays still, his eyes are drawn on it and all the life is in his face (core.ts).
+ * Returns `look` to make him glance towards something.
  */
-export declare function useDashyBody(card: RefObject<HTMLElement | null>, vars: RefObject<HTMLElement | null>, state: DashyState, opts?: {
-    room?: () => number;
-    reducedMotion?: boolean;
-}): {
+export declare function useDashyBody(host: RefObject<HTMLElement | null>, state: DashyState, reducedMotion?: boolean): {
     look: (nx: number, ny: number) => void | undefined;
-    getState: () => DashyState | undefined;
 };

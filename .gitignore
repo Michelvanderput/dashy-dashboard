@@ -5,3 +5,4 @@ swift/DashyKit/.swiftpm
 .env.local
 .vercel
 dist-app
+dist-real
