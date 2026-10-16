@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import { Dashy, NowPlayingBlock, useDashyTasks, useSpotify } from '../src/react';
-import { adoptTasksHash, loadTasksConnection, nowTask, type DashyState } from '../src';
+import { nowTask, type DashyState } from '../src';
 
-const store = { get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } }, remove: (k: string) => { try { localStorage.removeItem(k); } catch { /* private mode */ } } };
-/** Open the app once with #tasks=<https url>&key=<token>: it is remembered on this device and removed from the address bar. */
-function initialConnection() {
-  const { cleaned, adopted } = adoptTasksHash(location.hash, store);
-  if (adopted) history.replaceState(null, '', location.pathname + location.search + cleaned);
-  return loadTasksConnection(store);
-}
+import { initialConnection } from './storage';
 
 const env = import.meta.env as Record<string, string | undefined>;
 /** Two things for now: the avatar and the music player. Everything else is rebuilt from here. */

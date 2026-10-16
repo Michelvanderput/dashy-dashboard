@@ -73,3 +73,12 @@ test('connection: adopted from the hash once, cleaned from the address, unsafe u
   assert.equal(adoptTasksHash('#tasks=http%3A%2F%2F127.0.0.1%3A8787%2Fd', mem()).adopted, true, 'localhost over http is fine');
   const st3 = mem(); st3.set('dashy.tasks', '{broken'); assert.equal(loadTasksConnection(st3), null);
 });
+
+import { adoptPastedLink } from '../src/tasks-connection';
+test('pasted link (the Mac window has no address bar): full link or just the hash, anything else is refused and stores nothing', () => {
+  const link = 'https://x.test/#tasks=' + encodeURIComponent('https://x.test/api/state') + '&key=abcdefghij12&act=zyxwvutsrq99';
+  const a = mem(); assert.equal(adoptPastedLink('  ' + link + '\n', a), true);
+  assert.deepEqual(loadTasksConnection(a), { url: 'https://x.test/api/state', token: 'abcdefghij12', actionToken: 'zyxwvutsrq99', actionUrl: 'https://x.test/api/action' });
+  const b = mem(); assert.equal(adoptPastedLink(link.slice(link.indexOf('#')), b), true); assert.ok(loadTasksConnection(b));
+  for (const bad of ['', 'hallo', 'https://x.test/', 'https://x.test/#tasks=javascript%3Aalert(1)', '#tasks=http%3A%2F%2Fevil.example%2Fs', '#key=abcdefghij12']) { const c = mem(); assert.equal(adoptPastedLink(bad, c), false, bad); assert.equal(loadTasksConnection(c), null); }
+});

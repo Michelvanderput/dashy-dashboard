@@ -37,3 +37,14 @@ export function loadTasksConnection(store: KeyValueStore): TasksConnection | nul
   } catch { return null; }
 }
 export const forgetTasksConnection = (store: KeyValueStore) => store.remove(K);
+
+/**
+ * For windows without an address bar (the Mac app): accept what the user pastes, either the whole link
+ * (https://<app>/#tasks=...&key=...&act=...) or just the part from the #. Returns true when it was a valid link and is now remembered.
+ */
+export function adoptPastedLink(text: string, store: KeyValueStore): boolean {
+  const t = text.trim();
+  let hash = '';
+  try { hash = t.startsWith('#') ? t : new URL(t).hash; } catch { return false; }
+  return adoptTasksHash(hash, store).adopted;
+}

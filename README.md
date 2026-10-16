@@ -116,6 +116,28 @@ Bewust **niet** overgenomen: Supabase, meerdere gebruikers, de eigen OAuth-serve
 
 **Lokaal proberen:** `npm run api:dev` start dezelfde handlers op `http://127.0.0.1:8787` met een geheugenopslag (weg bij herstart) en toont de ontwikkelsleutels. Koppel de app met `#tasks=http://127.0.0.1:8787/api/state&key=dev-state-token-0123456789abcdef&act=dev-action-token-0123456789abcdef`. Getest met de officiële MCP-client.
 
+## Dashy op je Mac
+
+Een klein, transparant venster met Dashy erin dat altijd bovenop staat en op elk bureaublad meeloopt. Zijn ogen volgen je muis over je **hele** scherm (een webpagina ziet de muis alleen boven zichzelf, dus dat leest de Rust-kant uit), hij reageert op je echte taken, en onder hem staat wat er nu aan de beurt is. Pak hem vast aan het streepje onder hem om hem te verplaatsen. Er is geen Dock-icoon: hij zit in de menubalk (Toon of verberg, Altijd bovenop, Koppeling wissen, Stop).
+
+Gebouwd met [Tauri 2](https://tauri.app) en dezelfde Dashy en taken-koppeling als de web-app (`app/buddy.html`, `src-tauri/`).
+
+**Eenmalig op je Mac:** Xcode Command Line Tools (`xcode-select --install`), Rust (`rustup`) en Node.
+
+```bash
+npm install
+npm run desktop:dev      # ontwikkelen: venster met live herladen
+npm run desktop:build    # app + .dmg in src-tauri/target/release/bundle/
+```
+
+**Koppelen:** de eerste keer vraagt het venster om je koppel-link. Plak daar dezelfde link als voor het scherm (`https://<app>/#tasks=…&key=…&act=…`). Daarna onthoudt hij hem. Met "Koppeling wissen" in de menubalk begin je opnieuw.
+
+**Goed om te weten**
+- De app is niet ondertekend: bij de eerste start klik je met rechts op het icoon en kies je **Open** (anders blokkeert macOS hem). Wil je hem delen, dan is ondertekenen met een Apple-account nodig.
+- Een transparant venster op macOS vraagt Tauri's `macos-private-api`. Prima voor je eigen Mac, niet voor de Mac App Store.
+- Het uitlezen van de muis over het hele scherm vraagt geen extra toestemming van macOS.
+- Dit is getest op de Rust-compilatie (Linux) en de webpagina in een browser; het venster zelf is op een echte Mac nog niet gedraaid. Loop je ergens tegenaan, meld het dan.
+
 ## Aansturen vanuit je app
 
 Jouw app vertaalt gebeurtenissen naar een toestand. Voorbeeld:

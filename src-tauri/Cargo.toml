@@ -1,0 +1,24 @@
+[package]
+name = "dashy-desktop"
+version = "0.1.0"
+description = "Dashy on the Mac: a small floating buddy whose eyes follow your cursor."
+edition = "2021"
+publish = false
+
+[lib]
+name = "dashy_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# macos-private-api: needed for a transparent window on macOS (fine for your own Mac, not for the Mac App Store)
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

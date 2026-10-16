@@ -68,7 +68,6 @@ const CSS = `
 .dnp[data-playing="true"] .dnp-spin{animation-play-state:running}
 .dnp[data-playing="true"] .dnp-spin{will-change:transform}
 .dnp[data-paused="true"] .dnp-disc{filter:saturate(.55) brightness(.92)}
-.dnp-pill{display:inline-block;margin-top:8px;padding:2px 10px;border-radius:999px;font-size:.78em;letter-spacing:.04em;border:1px solid currentColor;opacity:.7}
 .dnp-spin svg{display:block;width:100%;height:100%}
 .dnp-sheen{position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:soft-light;
  background:conic-gradient(from 30deg,rgba(255,255,255,0),rgba(255,255,255,.75) 10%,rgba(255,255,255,0) 24%,rgba(255,255,255,0) 50%,rgba(255,255,255,.75) 60%,rgba(255,255,255,0) 74%)}
@@ -247,7 +246,6 @@ export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConn
             <p className="dnp-title">{np.title}</p>
             {artists && <p className="dnp-artist">{artists}</p>}
             <p className="dnp-note" role="status">{playing ? 'Speelt nu' : 'Gepauzeerd'}</p>
-            {!playing && <span className="dnp-pill" aria-hidden="true">Gepauzeerd</span>}
             <Progress np={np} playing={playing} />
             {onControl && canControl && <Controls playing={playing} onControl={onControl} />}
             {needsReconnect && onConnect && <button type="button" className="dnp-btn" onClick={onConnect}>Koppel opnieuw voor bediening</button>}
