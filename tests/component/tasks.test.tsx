@@ -34,3 +34,47 @@ describe('useDashyTasks', () => {
     await act(async () => {});
   });
 });
+
+describe('useDashyTasks: check off from the screen', () => {
+  const two = body([['a', 'Bellen', 'werk', 'vandaag', ''], ['b', 'Mailen', 'werk', 'vandaag', '']]);
+  const setup = (action: (init: RequestInit) => Response | Promise<Response>, o: { read?: boolean } = {}) => {
+    const f = vi.fn(async (u: string, init: RequestInit) => (String(u).endsWith('/action') ? action(init) : ok(two)));
+    const hook = renderHook(() => useDashyTasks({ url: 'https://x.test/api/state', token: 'read-token-1', actionUrl: o.read ? null : 'https://x.test/api/action', actionToken: 'act-token-1', intervalMs: 60_000, fetch: f as never }));
+    return { f, ...hook };
+  };
+  it('has no complete() without an action token: the screen only looks', async () => {
+    const { result } = setup(() => ok('{}'), { read: true });
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    expect(result.current.complete).toBeUndefined();
+  });
+  it('shows the check-off at once, celebrates, sends the action token, and offers undo', async () => {
+    let release!: () => void; const gate = new Promise<void>(r => (release = r));
+    const { result, f } = setup(async init => { await gate; expect(new Headers(init.headers).get('authorization')).toBe('Bearer act-token-1'); expect(JSON.parse(init.body as string)).toEqual({ action: 'done', id: 'a' }); return ok(body([['b', 'Mailen', 'werk', 'vandaag', '']])); });
+    await waitFor(() => expect(result.current.snapshot?.tasks).toHaveLength(2));
+    let p!: Promise<boolean>; act(() => { p = result.current.complete!('a'); });
+    await waitFor(() => expect(result.current.snapshot?.tasks.map(t => t.id)).toEqual(['b'])); // before the server answered
+    expect(result.current.state).toBe('done'); expect(result.current.justDone).toEqual({ id: 'a', title: 'Bellen' });
+    release(); expect(await p).toBe(true);
+    expect(result.current.snapshot?.tasks.map(t => t.id)).toEqual(['b']); expect(result.current.undo).toBeDefined();
+    expect(f.mock.calls.filter(c => String(c[0]).endsWith('/action'))).toHaveLength(1);
+  });
+  it('puts the task back and says so when the server refuses or is unreachable', async () => {
+    const r1 = setup(() => new Response('{}', { status: 401 }));
+    await waitFor(() => expect(r1.result.current.snapshot?.tasks).toHaveLength(2));
+    await act(async () => { expect(await r1.result.current.complete!('a')).toBe(false); });
+    expect(r1.result.current.snapshot?.tasks).toHaveLength(2); expect(r1.result.current.error).toMatch(/sleutel/); expect(r1.result.current.justDone).toBeNull();
+    cleanup();
+    const r2 = setup(() => { throw new TypeError('network'); });
+    await waitFor(() => expect(r2.result.current.snapshot?.tasks).toHaveLength(2));
+    await act(async () => { expect(await r2.result.current.complete!('a')).toBe(false); });
+    expect(r2.result.current.snapshot?.tasks).toHaveLength(2); expect(r2.result.current.error).toBeTruthy();
+  });
+  it('undo brings the task back with the server state', async () => {
+    let n = 0;
+    const { result } = setup(() => (n++ === 0 ? ok(body([['b', 'Mailen', 'werk', 'vandaag', '']])) : ok(two)));
+    await waitFor(() => expect(result.current.snapshot?.tasks).toHaveLength(2));
+    await act(async () => { await result.current.complete!('a'); });
+    await act(async () => { expect(await result.current.undo!()).toBe(true); });
+    expect(result.current.snapshot?.tasks).toHaveLength(2); expect(result.current.justDone).toBeNull(); expect(result.current.undo).toBeUndefined();
+  });
+});

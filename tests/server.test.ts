@@ -243,3 +243,44 @@ test('client: whenLabel across the week and the year', () => {
   assert.equal(whenLabel(at('2026-10-16 08:00'), true, NOW), 'vandaag 08:00');
 });
 void buildState;
+
+// ---- the screen's one write: done / undo
+import { handleAction } from '../src/server/mcp';
+import { actionUrlOf, adoptTasksHash, loadTasksConnection } from '../src/tasks-connection';
+const ACT = 'action-token-0123456789abcdef';
+const act = (store: Store | null, body: unknown, o: { auth?: string | null; method?: string; raw?: string } = {}) => handleAction(new Request('https://x.test/api/action', { method: o.method ?? 'POST', headers: { 'content-type': 'application/json', ...(o.auth === null ? {} : { authorization: `Bearer ${o.auth ?? ACT}` }) }, body: o.method === 'GET' || o.method === 'OPTIONS' ? undefined : (o.raw ?? JSON.stringify(body)) }), { store, token: ACT, now: () => NOW });
+test('action: done and undo with its own token, idempotent, answers with the fresh state', async () => {
+  const s = fresh(); const { added } = await addTasks(s, { tasks: [{ title: 'A', category: 'thuis' }, { title: 'B', category: 'thuis' }] }, NOW);
+  const [a] = added.map(x => x.id);
+  const r = await act(s, { action: 'done', id: a }); assert.equal(r.status, 200);
+  const st = await r.json() as any; assert.deepEqual(st.tasks.map((t: any) => t.title), ['B']); assert.deepEqual(st.recentlyDone.map((t: any) => t.title), ['A']);
+  const again = await act(s, { action: 'done', id: a }); assert.equal(again.status, 200);
+  assert.equal((await s.tasks()).find(t => t.id === a)!.doneAt, NOW, 'a second tap does not move doneAt');
+  const back = await (await act(s, { action: 'undo', id: a })).json() as any; assert.deepEqual(back.tasks.map((t: any) => t.title).sort(), ['A', 'B']);
+  assert.equal((await s.tasks()).find(t => t.id === a)!.position, 1, 'it comes back at its old place');
+});
+test('action: only its own token; the read and write tokens do nothing here, and the action token does nothing elsewhere', async () => {
+  const s = fresh(); const { added } = await addTasks(s, { tasks: [{ title: 'A', category: 'thuis' }] }, NOW);
+  const body = { action: 'done', id: added[0].id };
+  for (const auth of [null, READ, TOKEN, 'x'.repeat(20)]) assert.equal((await act(s, body, { auth })).status, 401, String(auth));
+  assert.equal((await s.tasks())[0].done, false);
+  assert.equal((await state(s, { auth: ACT })).status, 401); assert.equal((await mcp(s, call(1, 'dashboard'), { auth: ACT })).status, 401);
+  const noToken = await handleAction(new Request('https://x.test/api/action', { method: 'POST', headers: { authorization: `Bearer ${ACT}` }, body: JSON.stringify(body) }), { store: s, token: undefined, now: () => NOW }); assert.equal(noToken.status, 503);
+});
+test('action: it can do nothing but done/undo, and rejects bad input', async () => {
+  const s = fresh(); await addTasks(s, { tasks: [{ title: 'A', category: 'thuis' }] }, NOW);
+  assert.equal((await act(s, { action: 'done', id: 'nonexist' })).status, 404);
+  for (const bad of [{ action: 'remove', id: 'abcdefgh' }, { action: 'done' }, { action: 'done', id: 5 }, { action: 'done', id: '../x' }, { id: 'a' }, []]) assert.equal((await act(s, bad)).status, 400, JSON.stringify(bad));
+  assert.equal((await act(s, null, { raw: '{oops' })).status, 400); assert.equal((await act(s, null, { raw: 'x'.repeat(2000) })).status, 413);
+  assert.equal((await act(s, {}, { method: 'GET' })).status, 405); assert.equal((await act(null, { action: 'done', id: 'abcdefgh' })).status, 503);
+  const pre = await act(s, {}, { method: 'OPTIONS' }); assert.equal(pre.status, 204); assert.match(pre.headers.get('access-control-allow-headers')!, /content-type/);
+  assert.equal((await s.tasks()).length, 1);
+});
+test('connection: act token adopted, action url derived from the state url, no action without a token', () => {
+  const m = new Map<string, string>(); const st = { get: (k: string) => m.get(k) ?? null, set: (k: string, v: string) => void m.set(k, v), remove: (k: string) => void m.delete(k) };
+  adoptTasksHash('#tasks=' + encodeURIComponent('https://x.test/api/state') + '&key=abcdefghij12&act=zyxwvutsrq99', st);
+  assert.deepEqual(loadTasksConnection(st), { url: 'https://x.test/api/state', token: 'abcdefghij12', actionToken: 'zyxwvutsrq99', actionUrl: 'https://x.test/api/action' });
+  m.clear(); adoptTasksHash('#tasks=' + encodeURIComponent('https://x.test/api/state') + '&key=abcdefghij12', st);
+  assert.equal(loadTasksConnection(st)!.actionUrl, null);
+  assert.equal(actionUrlOf('https://x.test/api/state?x=1'), 'https://x.test/api/action'); assert.equal(actionUrlOf('https://x.test/dash.json'), null); assert.equal(actionUrlOf('nonsense'), null);
+});

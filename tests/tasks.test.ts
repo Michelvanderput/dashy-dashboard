@@ -66,7 +66,7 @@ test('connection: adopted from the hash once, cleaned from the address, unsafe u
   const st = mem();
   const r = adoptTasksHash('#tasks=https%3A%2F%2Fexample.com%2Fdash&key=abcdefghij12&x=1', st);
   assert.deepEqual(r, { cleaned: '#x=1', adopted: true });
-  assert.deepEqual(loadTasksConnection(st), { url: 'https://example.com/dash', token: 'abcdefghij12' });
+  assert.deepEqual(loadTasksConnection(st), { url: 'https://example.com/dash', token: 'abcdefghij12', actionUrl: null, actionToken: null });
   const st2 = mem();
   for (const bad of ['javascript:alert(1)', 'http://evil.example/x', 'ftp://x.y/z', 'nonsense']) assert.equal(adoptTasksHash('#tasks=' + encodeURIComponent(bad), st2).adopted, false, bad);
   assert.equal(loadTasksConnection(st2), null);

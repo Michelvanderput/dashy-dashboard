@@ -3,7 +3,7 @@
  * Plain JSON-RPC with no SDK: initialize, ping, tools/list, tools/call; batches and notifications are handled.
  * Few tools that work in batches and return compact answers, so a braindump costs few tokens.
  */
-import { addTasks, dashboard, reorderTasks, setAppointment, updateTasks } from './ops';
+import { addTasks, dashboard, reorderTasks, setAppointment, setDone, updateTasks } from './ops';
 import { authorized, tokenOf } from './auth';
 import { InputError, BATCH_MAX, CATEGORIES, NOTE_MAX, TITLE_MAX } from './model';
 import type { Store } from './store';
@@ -108,4 +108,28 @@ export async function handleState(req: Request, d: StateDeps): Promise<Response>
   if (!authorized(tokenOf(req), d.token)) return json({ error: 'unauthorized' }, 401, cors);
   try { return json(await dashboard(d.store, d.now()), 200, cors); }
   catch (e) { console.error('state failed', e); return json({ error: 'storage' }, 502, cors); }
+}
+
+export interface ActionDeps { store: Store | null; token: string | undefined; now: () => number }
+/**
+ * What the screen may write: check a task off or undo it, nothing else. Its own token (not the read token, not the MCP token),
+ * so a leaked screen key cannot add, edit or delete tasks. Answers with the fresh state, so the screen shows what the server has.
+ * POST { "action": "done" | "undo", "id": "<task id>" }
+ */
+export async function handleAction(req: Request, d: ActionDeps): Promise<Response> {
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-max-age': '600' };
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (req.method !== 'POST') return json({ error: 'method' }, 405, { ...cors, allow: 'POST' });
+  if (!d.token || !d.store) return json({ error: 'not-configured' }, 503, cors);
+  if (!authorized(tokenOf(req), d.token)) return json({ error: 'unauthorized' }, 401, cors);
+  const text = await req.text();
+  if (text.length > 1024) return json({ error: 'too-large' }, 413, cors);
+  let b: { action?: unknown; id?: unknown };
+  try { b = JSON.parse(text); } catch { return json({ error: 'bad-json' }, 400, cors); }
+  if ((b.action !== 'done' && b.action !== 'undo') || typeof b.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(b.id)) return json({ error: 'bad-request' }, 400, cors);
+  try {
+    const now = d.now();
+    if (!(await setDone(d.store, b.id, b.action === 'done', now))) return json({ error: 'unknown-task' }, 404, cors);
+    return json(await dashboard(d.store, now), 200, cors);
+  } catch (e) { console.error('action failed', e); return json({ error: 'storage' }, 502, cors); }
 }

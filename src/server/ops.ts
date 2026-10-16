@@ -85,3 +85,15 @@ export async function setAppointment(store: Store, input: unknown, now: number):
   const a: Appointment = { title, at: s.dueAt, endsAt: e?.dueAt ?? null };
   await store.setAppointment(a); return { appointment: a };
 }
+
+/**
+ * The one write the screen may do: check a task off or undo it. Idempotent (checking off a done task changes nothing, so a double tap
+ * or a retry is harmless). Returns false when there is no such task.
+ */
+export async function setDone(store: Store, id: string, done: boolean, now: number): Promise<boolean> {
+  const t = (await store.tasks()).find(x => x.id === id);
+  if (!t) return false;
+  if (t.done === done) return true;
+  await store.putTasks([{ ...t, done, doneAt: done ? now : null }]);
+  return true;
+}

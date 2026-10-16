@@ -20,7 +20,7 @@ export function App() {
 
   // His mood follows your real tasks (driver rules); music only makes a calm Dashy dance.
   const [conn] = useState(initialConnection);
-  const tasks = useDashyTasks({ url: conn?.url, token: conn?.token });
+  const tasks = useDashyTasks({ url: conn?.url, token: conn?.token, actionUrl: conn?.actionUrl, actionToken: conn?.actionToken });
   const state: DashyState = nowPlaying?.playing && tasks.state === 'idle' ? 'dancing' : tasks.state;
   const now = nowTask(tasks.snapshot), still = tasks.snapshot?.leftOpen.length ?? 0;
 
@@ -33,11 +33,13 @@ export function App() {
         {tasks.connected ? (
           <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: '.95rem' }}>
             {now ? <>Nu: <strong>{now.title}</strong>{now.when && <span style={{ opacity: .6 }}> · {now.when}</span>}</> : 'Niets open. Rust maar.'}
+            {now && tasks.complete && <button type="button" onClick={() => void tasks.complete!(now.id)} style={btn}>Klaar</button>}
+            {tasks.justDone && <span role="status" style={{ display: 'block', fontSize: '.85rem', marginTop: 8 }}>✓ {tasks.justDone.title}{tasks.undo && <> · <button type="button" onClick={() => void tasks.undo!()} style={link}>Ongedaan maken</button></>}</span>}
             {still > 0 && <span style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{still} nog open van eerder</span>}
             {tasks.error && <span role="status" style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{tasks.error}</span>}
           </p>
         ) : (
-          <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: '.8rem', opacity: .6, maxWidth: '26rem' }}>Nog niet gekoppeld aan je taken. Open de app eenmalig met <code>#tasks=https://…&amp;key=…</code> achter het adres.</p>
+          <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: '.8rem', opacity: .6, maxWidth: '26rem' }}>Nog niet gekoppeld aan je taken. Open de app eenmalig met <code>#tasks=https://…&amp;key=…&amp;act=…</code> achter het adres.</p>
         )}
       </section>
       <section aria-labelledby="mu" style={card}>
@@ -54,4 +56,6 @@ export function App() {
   );
 }
 
+const btn: React.CSSProperties = { display: 'block', margin: '12px auto 0', padding: '12px 28px', minHeight: 44, borderRadius: 999, border: 0, background: 'var(--ink)', color: 'var(--bg)', font: 'inherit', fontWeight: 600, cursor: 'pointer' };
+const link: React.CSSProperties = { background: 'none', border: 0, padding: 0, font: 'inherit', textDecoration: 'underline', color: 'inherit', cursor: 'pointer' };
 const card: React.CSSProperties = { display: 'grid', gap: 16, justifyItems: 'center', alignContent: 'center', padding: 'clamp(18px,3vmin,32px)', borderRadius: 28, background: 'var(--card)' };

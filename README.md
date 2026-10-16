@@ -105,12 +105,14 @@ Bewust **niet** overgenomen: Supabase, meerdere gebruikers, de eigen OAuth-serve
 **Tools** (5, alles in batches): `dashboard`, `add_tasks`, `update_tasks`, `reorder_tasks`, `appointment`. Titel max 60 tekens zonder tijd of datum erin; tijd in `due` (`YYYY-MM-DD HH:mm`, `YYYY-MM-DD` of `HH:mm`, Nederlandse tijd); toelichting in `note` (max 100).
 
 **Opzetten**
-1. Maak een gratis Upstash Redis-database en zet `UPSTASH_REDIS_REST_URL` en `UPSTASH_REDIS_REST_TOKEN` in Vercel.
-2. Zet twee verschillende lange sleutels: `DASHY_MCP_TOKEN` (Claude, mag schrijven) en `DASHY_STATE_TOKEN` (het scherm, alleen lezen). Zie `.env.example`.
+1. Maak een gratis Upstash Redis-database via Vercel (Storage, Marketplace). Die zet de variabelen zelf (`KV_REST_API_URL` en `KV_REST_API_TOKEN`; de namen `UPSTASH_REDIS_REST_URL` en `UPSTASH_REDIS_REST_TOKEN` werken ook).
+2. Zet drie verschillende lange sleutels: `DASHY_MCP_TOKEN` (Claude, mag schrijven), `DASHY_STATE_TOKEN` (het scherm, alleen lezen) en `DASHY_ACTION_TOKEN` (het scherm, mag alleen afvinken of ongedaan maken). Zie `.env.example`.
 3. Claude: Instellingen, Connectors, eigen connector toevoegen met `https://<app>/api/mcp` en de header `Authorization: Bearer <DASHY_MCP_TOKEN>`. Kan jouw Claude-app geen header meegeven, gebruik dan `https://<app>/api/mcp/<DASHY_MCP_TOKEN>`.
-4. Scherm koppelen: open eenmalig `https://<app>/#tasks=https://<app>/api/state&key=<DASHY_STATE_TOKEN>`.
+4. Scherm koppelen: open eenmalig `https://<app>/#tasks=https://<app>/api/state&key=<DASHY_STATE_TOKEN>&act=<DASHY_ACTION_TOKEN>`. Zonder `act` kan het scherm alleen kijken.
 
-**Lokaal proberen:** `npm run api:dev` start dezelfde handlers op `http://127.0.0.1:8787` met een geheugenopslag (weg bij herstart) en toont de ontwikkelsleutels. Koppel de app met `#tasks=http://127.0.0.1:8787/api/state&key=dev-state-token-0123456789abcdef`. Getest met de officiële MCP-client.
+**Afvinken vanaf het scherm:** de knop "Klaar" bij de taak onder Dashy. Het scherm toont het meteen (en Dashy viert het), de server bevestigt daarna; lukt dat niet, dan komt de taak terug met een rustige melding. Daarna staat er 8 seconden "Ongedaan maken". `POST /api/action` kan niets anders dan `done` en `undo`, en is idempotent (dubbel tikken doet niets extra's). Een uitgelekte schermsleutel kan dus nooit taken toevoegen of verwijderen.
+
+**Lokaal proberen:** `npm run api:dev` start dezelfde handlers op `http://127.0.0.1:8787` met een geheugenopslag (weg bij herstart) en toont de ontwikkelsleutels. Koppel de app met `#tasks=http://127.0.0.1:8787/api/state&key=dev-state-token-0123456789abcdef&act=dev-action-token-0123456789abcdef`. Getest met de officiële MCP-client.
 
 ## Aansturen vanuit je app
 
