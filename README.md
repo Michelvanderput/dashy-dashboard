@@ -7,7 +7,7 @@ Dashy is een levende avatar (twee zwarte pilvormige ogen op een wit lichaam) en 
 ```bash
 npm install
 npm test        # 34 tests: grenzen, soepelheid, scenario's
-npm run build   # dist/dashy.js, types en dist/demo.html (dubbelklikken om te proberen)
+npm run build   # dist/dashy.js en types
 ```
 
 ```ts
@@ -66,7 +66,7 @@ De achtergrondkleur van de app-iconen staat bovenaan `scripts/export-static.ts` 
 
 ## Spotify-blok
 
-`<NowPlayingBlock />`: de albumhoes met een vinylplaat die eruit schuift en draait (33⅓ toeren) zolang er muziek speelt. Dashy danst ernaast. Pauzeert de muziek, dan stopt de plaat en wordt Dashy weer rustig.
+`<NowPlayingBlock />`: de albumhoes met een vinylplaat die eruit schuift en draait (33⅓ toeren) zolang er muziek speelt. In de app danst Dashy in zijn eigen blok terwijl er muziek speelt (met `showDashy` kan hij ook naast de plaat staan). Pauzeert de muziek, dan stopt de plaat en wordt Dashy weer rustig.
 
 ```tsx
 import { NowPlayingBlock, useSpotify } from 'dashy-avatar/react';
@@ -74,6 +74,11 @@ import { NowPlayingBlock, useSpotify } from 'dashy-avatar/react';
 const sp = useSpotify({ clientId: SPOTIFY_CLIENT_ID, redirectUri: 'https://jouw-app.example/callback' });
 <NowPlayingBlock {...sp} onConnect={sp.connect} onDisconnect={sp.disconnect} driver={driverResolution} spotifyLogoSrc="/spotify-logo.svg" />
 ```
+
+**In deze app (`npm run dev`) koppel je Spotify zo:**
+1. Maak een app op <https://developer.spotify.com/dashboard> (Web API) en zet bij Redirect URI precies het adres waarop de app draait: `http://127.0.0.1:5173/` lokaal, of `https://jouw-site.vercel.app/` online. Niet `localhost`.
+2. Maak een bestand `.env.local` naast `package.json` met `VITE_SPOTIFY_CLIENT_ID=<je Client ID>` en (lokaal) `VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/`. Online zet je dezelfde variabelen in de Vercel-projectinstellingen. Het Client ID is geen geheim; er is geen client secret nodig.
+3. Start de app opnieuw en tik op "Verbind met Spotify". Zonder client id toont het blok een melding dat Spotify nog niet gekoppeld is.
 
 **Wat jij moet regelen (kan ik niet voor je doen):**
 1. Maak een app aan op <https://developer.spotify.com/dashboard> en zet de redirect-URL erin. Alleen `https://...` of `http://127.0.0.1:POORT/...`, **niet** `localhost`.

@@ -13,8 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts && vitest run",
-    "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && esbuild src/spotify/index.ts --bundle --format=esm --minify --outfile=dist/spotify.js && tsc -p tsconfig.build.json && node scripts/make-demo.mjs",
-    "demo": "node scripts/make-demo.mjs",
+    "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && esbuild src/spotify/index.ts --bundle --format=esm --minify --outfile=dist/spotify.js && tsc -p tsconfig.build.json",
     "export": "tsx scripts/export-static.ts",
     "swift:reference": "tsx scripts/swift-reference.ts",
     "swift:test": "cd swift/DashyKit && swift test",
