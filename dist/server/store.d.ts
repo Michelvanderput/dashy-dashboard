@@ -1,5 +1,5 @@
 /** Storage. One record per task (a hash), so two writers never overwrite each other's tasks. */
-import type { Task } from './model.js';
+import type { Task, TimeEntry } from './model.js';
 import type { Appointment } from './plan.js';
 export interface Store {
     tasks(): Promise<Task[]>;
@@ -7,13 +7,18 @@ export interface Store {
     deleteTasks(ids: string[]): Promise<void>;
     appointment(): Promise<Appointment | null>;
     setAppointment(a: Appointment | null): Promise<void>;
+    entries(): Promise<TimeEntry[]>;
+    putEntries(es: TimeEntry[]): Promise<void>;
+    deleteEntries(ids: string[]): Promise<void>;
 }
 /** Defensive read: a damaged record is skipped, never thrown on, so one bad row cannot take the whole screen down. */
 export declare function parseTask(raw: unknown): Task | null;
+export declare function parseEntry(raw: unknown): TimeEntry | null;
 export declare function parseAppointment(raw: unknown): Appointment | null;
 export declare class MemoryStore implements Store {
     private t;
     private a;
+    private e;
     tasks(): Promise<{
         id: string;
         title: string;
@@ -34,6 +39,18 @@ export declare class MemoryStore implements Store {
         endsAt?: number | null;
     } | null>;
     setAppointment(a: Appointment | null): Promise<void>;
+    entries(): Promise<{
+        id: string;
+        day: string;
+        project: string | null;
+        description: string;
+        minutes: number;
+        booked: boolean;
+        taskId: string | null;
+        createdAt: number;
+    }[]>;
+    putEntries(es: TimeEntry[]): Promise<void>;
+    deleteEntries(ids: string[]): Promise<void>;
 }
 export interface UpstashOptions {
     url: string;
@@ -53,6 +70,9 @@ export declare class UpstashStore implements Store {
     deleteTasks(ids: string[]): Promise<void>;
     appointment(): Promise<Appointment | null>;
     setAppointment(a: Appointment | null): Promise<void>;
+    entries(): Promise<TimeEntry[]>;
+    putEntries(es: TimeEntry[]): Promise<void>;
+    deleteEntries(ids: string[]): Promise<void>;
 }
 export interface SupabaseOptions {
     url: string;
@@ -73,4 +93,7 @@ export declare class SupabaseStore implements Store {
     deleteTasks(ids: string[]): Promise<void>;
     appointment(): Promise<Appointment | null>;
     setAppointment(a: Appointment | null): Promise<void>;
+    entries(): Promise<TimeEntry[]>;
+    putEntries(es: TimeEntry[]): Promise<void>;
+    deleteEntries(ids: string[]): Promise<void>;
 }

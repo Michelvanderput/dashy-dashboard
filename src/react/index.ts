@@ -13,3 +13,7 @@ export { useDashyTasks } from './useDashyTasks';
 export type { DashyTasks, UseDashyTasksOptions } from './useDashyTasks';
 export { DayPanel } from './DayPanel';
 export type { DayPanelProps } from './DayPanel';
+export { HoursPanel } from './HoursPanel';
+export type { HoursPanelProps } from './HoursPanel';
+export { useWakeLock } from './useWakeLock';
+export type { WakeLockState } from './useWakeLock';

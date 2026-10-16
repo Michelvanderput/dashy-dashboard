@@ -29,6 +29,8 @@ export interface NowPlayingBlockProps {
     needsReconnect?: boolean;
     /** Why the last control did not work (shown quietly under the controls). */
     controlError?: string;
+    /** Only look: no menu, no controls, no buttons (a screen on the charger). */
+    kiosk?: boolean;
     /** Message to show with status "error". */
     error?: string;
     className?: string;
@@ -39,4 +41,4 @@ export interface NowPlayingBlockProps {
  * dances next to it (his motion comes from core.ts, not from this component). Spotify's rules for the cover are followed:
  * shown whole and unaltered (not cropped, covered or animated), 4 px corners (8 px from 300 px up), and a link back to Spotify. The record colour is picked per album from a fixed palette; the cover is never used on the label.
  */
-export declare function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, onControl, canControl, needsReconnect, controlError, driver, size, bare, showDashy, error, className, style }: NowPlayingBlockProps): import("react").JSX.Element;
+export declare function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, onControl, canControl, needsReconnect, controlError, kiosk, driver, size, bare, showDashy, error, className, style }: NowPlayingBlockProps): import("react").JSX.Element;

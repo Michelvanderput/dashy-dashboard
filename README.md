@@ -148,6 +148,25 @@ Onder Dashy staat je dag in één oogopslag (`src/day.ts`, `DayPanel`):
 
 De afspraak zet je via Claude met de tool `appointment`. De werkdag stel je in met `DASHY_WORKDAY=09:00-17:30` in Vercel (standaard 08:30-17:00, maandag tot en met vrijdag); een ongeldige waarde geeft de standaard.
 
+## Vrije tijd, uren en terugblik
+
+**Vrije-tijdmodus.** Na het einde van je werkdag (en in het weekend) wordt het hele scherm warmer, en wachten werktaken tot de volgende werkdag ("1 werktaak wacht tot de volgende werkdag"). Een werktaak met een echt tijdstip later vandaag blijft zichtbaar, zodat een deadline vanavond niet verdwijnt. De ochtend voor je werkdag begint telt nog als werk. In vrije tijd wordt Dashy niet sip van een rustige avond. Je werkdag stel je in met `DASHY_WORKDAY` (zie hierboven).
+
+**Uren loggen** via Claude (`log_time`): "2 uur aan het rapport voor klant A" wordt een regel met minuten, project en omschrijving (eventueel van een taak, en voor een eerdere dag). Verkeerd gelogd? `edit_time` (aanpassen, verplaatsen, verwijderen). `time_log` toont een dag met totaal, per project en wat nog te boeken is.
+
+**Boeken.** Op het scherm staat de uren van vandaag rustig onder je dag. Vanaf een kwartier voor het einde van je werkdag verschijnt "Tijd om je uren te boeken", per project, tot alles geboekt is. Heb je geboekt in je urensysteem, zeg dat dan tegen Claude (`mark_booked`, op id of een hele dag). Uren van eerdere dagen die nog niet geboekt zijn krijgen één rustige regel, zonder rood en zonder verwijt.
+
+**Weekterugblik.** Vraag Claude "hoe ging mijn week?" (`week_review`): alleen feiten van maandag tot zondag, namelijk wat je afrondde per categorie, per dag en per dagdeel, de uren per project en wat nog openstaat. Claude schrijft er het verhaal bij in de toon van de buddy: vier wat lukte, zonder oordeel, scores of streaks. Afgeronde taken blijven twee weken bewaard, zodat dat kan.
+
+**Eenmalig in Supabase** (alleen als je Supabase gebruikt): voer het onderste deel van `db/dashy-tasks.sql` (tabel `dashy_time`) nog eens uit. Bij Upstash is niets nodig.
+
+## Scherm aan de lader
+
+- **Installeren.** iPhone: open de app in Safari, Deel, **Zet op beginscherm**, en open hem daarna altijd via dat icoon. Android of Chrome: "App installeren" in het menu. Hij start dan zonder adresbalk, en opent ook zonder verbinding met het laatste beeld (de service worker, `app/public/sw.js`, haalt altijd eerst het nieuwste en bewaart niets vooraf).
+- **Scherm aan laten.** Onderaan staat een vinkje "Scherm aan laten": zolang het venster zichtbaar is, gaat het scherm niet op slot (Wake Lock, Safari 16.4+, Chrome en Edge). Lukt dat niet, dan staat er waarom; zet dan **Instellingen, Scherm en helderheid, Automatisch vergrendelen** op **Nooit** zolang hij laadt.
+- **Kiosk-weergave.** Open `https://<app>/?kiosk=1` (of tik onderaan op "Kiosk-weergave"): alleen wat er gebeurt, zonder knoppen, de muis verdwijnt, het scherm blijft aan, de tekst schaalt mee met het scherm, en het beeld schuift om de paar minuten een paar pixels tegen inbranden. Afvinken doe je dan op een ander apparaat of via Claude; het kioskscherm werkt live mee. Op een telefoon op zijn zij past alles ook: de uren staan dan compact.
+- **Automatisch openen bij opladen (iPhone).** App **Opdrachten**, Automatisering, nieuwe, **Lader**, *Is aangesloten*, actie **Open app** (Dashy), en zet *Vraag voor uitvoeren* uit. Een webapp kan zelf niet zien dat hij aan de lader hangt, daarom doet Opdrachten het openen.
+
 ## Aansturen vanuit je app
 
 Jouw app vertaalt gebeurtenissen naar een toestand. Voorbeeld:

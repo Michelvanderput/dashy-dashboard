@@ -74,3 +74,48 @@ export function newId(taken: ReadonlySet<string> = new Set()): string {
     if (!taken.has(id)) return id;
   }
 }
+
+// ---- hours: time spent, per project, booked or not yet
+
+export interface TimeEntry {
+  id: string;
+  /** The day it belongs to, YYYY-MM-DD (Dutch time). */
+  day: string;
+  /** Client or project, or null when not said. */
+  project: string | null;
+  description: string;
+  minutes: number;
+  /** Booked in the time sheet of the employer or client. */
+  booked: boolean;
+  /** The task it came from, when there is one. */
+  taskId: string | null;
+  createdAt: number;
+}
+export const MINUTES_MAX = 960; // 16 hours in one entry is the most that makes sense
+export const PROJECT_MAX = 60, DESCRIPTION_MAX = 120, DAYS_BACK_MAX = 90;
+
+export function checkMinutes(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > MINUTES_MAX) throw new InputError(`minutes moet een heel getal van 1 tot ${MINUTES_MAX} zijn`);
+  return v;
+}
+export function checkProject(v: unknown): string {
+  if (typeof v !== 'string') throw new InputError('project moet tekst zijn');
+  const t = v.trim().replace(/\s+/g, ' ');
+  if (!t || [...t].length > PROJECT_MAX) throw new InputError(`project moet 1 tot ${PROJECT_MAX} tekens zijn (null = geen project)`);
+  return t;
+}
+export function checkDescription(v: unknown): string {
+  if (typeof v !== 'string') throw new InputError('description moet tekst zijn');
+  const t = v.trim().replace(/\s+/g, ' ');
+  if (!t || [...t].length > DESCRIPTION_MAX) throw new InputError(`description moet 1 tot ${DESCRIPTION_MAX} tekens zijn`);
+  return t;
+}
+/** A day as YYYY-MM-DD: a real date, today or in the past (`aheadDays`: or that many days ahead), at most 90 days back. */
+export function parseDay(v: unknown, now: number, tz = TIME_ZONE, aheadDays = 0): string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new InputError("day moet 'YYYY-MM-DD' zijn");
+  const [y, m, d] = v.split('-').map(Number);
+  if (zonedToEpoch(y, m, d, 12, 0, tz) === null) throw new InputError(`day ${v} bestaat niet`);
+  if (v > relativeDay(now, aheadDays, tz)) throw new InputError(aheadDays ? `day mag niet meer dan ${aheadDays} dagen vooruit liggen` : 'day mag niet in de toekomst liggen');
+  if (v < relativeDay(now, -DAYS_BACK_MAX, tz)) throw new InputError(`day mag niet meer dan ${DAYS_BACK_MAX} dagen terug liggen`);
+  return v;
+}

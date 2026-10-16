@@ -18,9 +18,10 @@ export { ALL_STATES, renderSvg, settledGeometry, stillGeometry } from './static'
 export type { StaticOptions } from './static';
 export { faceMotion } from './render';
 export type { FaceMotion, FaceMotionOptions } from './render';
-export { TASK_DRIVER_CONFIG, nowTask, parseDashboard, parseMinutes, parseWhen, snapshotEvents } from './tasks';
-export type { DashTask, DashboardSnapshot } from './tasks';
+export { FREE_TIME_DRIVER_CONFIG, NO_HOURS, TASK_DRIVER_CONFIG, nowTask, parseDashboard, parseMinutes, parseWhen, snapshotEvents } from './tasks';
+export type { DashTask, DashboardSnapshot, Hours } from './tasks';
 export { adoptPastedLink, adoptTasksHash, forgetTasksConnection, loadTasksConnection } from './tasks-connection';
 export type { TasksConnection } from './tasks-connection';
-export { SOON_MS, appointmentView, dayProgress, duration, positionOnDay } from './day';
+export { BOOKING_LEAD_MS, SOON_MS, appointmentView, isBookingTime, dayProgress, duration, positionOnDay } from './day';
 export type { AppointmentView, DayPhase, DayProgress, Workday } from './day';
+export { burnInOffset, isKiosk } from './kiosk';

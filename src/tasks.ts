@@ -16,13 +16,23 @@ export interface DashboardSnapshot {
   appointment: { title: string; at: number; endsAt: number | null } | null;
   /** The working day, for the day bar. */
   workday: { start: string; end: string; days: number[] };
+  /** Work time or free time (after the working day, days off): the screen turns warmer and work tasks wait. */
+  mode: 'work' | 'free';
+  /** How many work tasks wait until the next working day. */
+  waiting: number;
+  hours: Hours;
 }
+/** Hours of today, and what is still to be booked. */
+export interface Hours { day: string; totalMin: number; unbookedMin: number; perProject: { project: string | null; minutes: number; unbookedMin: number }[]; olderUnbookedMin: number }
+export const NO_HOURS: Hours = { day: '', totalMin: 0, unbookedMin: 0, perProject: [], olderUnbookedMin: 0 };
 const DEFAULT_WORKDAY = { start: '08:30', end: '17:00', days: [1, 2, 3, 4, 5] };
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const APPT_ID = '__appointment';
 
 /** Strict (30 min before a deadline), never angry (-1: not even at the exact moment), nothing after the time has passed. */
 export const TASK_DRIVER_CONFIG: Partial<DriverConfig> = { strictWithinMs: 30 * 60_000, angryWithinMs: -1, overdueGraceMs: 0, quietAfterMs: 2 * 60 * 60_000 };
+/** In free time nothing is expected of you: a quiet evening must not make him sad. */
+export const FREE_TIME_DRIVER_CONFIG: Partial<DriverConfig> = { ...TASK_DRIVER_CONFIG, quietAfterMs: Number.MAX_SAFE_INTEGER / 4 };
 
 const DAYS = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
 const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
@@ -89,7 +99,7 @@ export function parseDashboard(raw: unknown): DashboardSnapshot {
     return { id: r[0] as string, title: r[1] as string, category: r[2] as string, when: (r[3] as string) ?? '', due: parseWhen((r[3] as string) ?? '', today), note: str(r[4], 400) ? (r[4] as string) : '' };
   });
   const leftOpen = Array.isArray(o.left_open) ? o.left_open.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
-  return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today), appointment: null, workday: DEFAULT_WORKDAY };
+  return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today), appointment: null, workday: DEFAULT_WORKDAY, mode: 'work', waiting: 0, hours: NO_HOURS };
 }
 
 /** Version 2 (server/plan.ts StateBody): epoch times and an explicit hasTime, nothing to parse out of Dutch text. */
@@ -111,7 +121,13 @@ function parseV2(o: Record<string, unknown>): DashboardSnapshot {
   const w = o.workday as Record<string, unknown> | undefined;
   const workday = w && typeof w.start === 'string' && HHMM.test(w.start) && typeof w.end === 'string' && HHMM.test(w.end) && w.end > w.start && Array.isArray(w.days) && w.days.every(d => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6)
     ? { start: w.start, end: w.end, days: w.days as number[] } : DEFAULT_WORKDAY;
-  return { today, tasks, leftOpen, timeTodayMin: 0, appointment, workday };
+  const h = o.hours as Record<string, unknown> | undefined, nn = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : 0);
+  const hours: Hours = h && typeof h === 'object' && Array.isArray(h.perProject)
+    ? { day: typeof h.day === 'string' ? h.day : today, totalMin: nn(h.totalMin), unbookedMin: nn(h.unbookedMin), olderUnbookedMin: nn(h.olderUnbookedMin),
+        perProject: h.perProject.slice(0, 20).filter((p): p is { project: string | null; minutes: number; unbookedMin: number } => typeof p === 'object' && p !== null && typeof (p as { minutes?: unknown }).minutes === 'number')
+          .map(p => ({ project: typeof p.project === 'string' ? p.project.slice(0, 60) : null, minutes: nn(p.minutes), unbookedMin: nn(p.unbookedMin) })) }
+    : NO_HOURS;
+  return { today, tasks, leftOpen, timeTodayMin: 0, appointment, workday, mode: o.mode === 'free' ? 'free' : 'work', waiting: nn(o.waiting), hours };
 }
 
 /** What changed between two snapshots, as driver events. `prev` null = first look. */

@@ -92,14 +92,16 @@ test('update_tasks: done, move, clear, remove; unknown id refuses the whole batc
   assert.equal((await s.tasks()).length, 1);
   await assert.rejects(updateTasks(s, { updates: [{ id: b, bogus: 1 }] }, NOW), /onbekend veld/);
 });
-test('done tasks show for a day as recentlyDone and are pruned after three days', async () => {
+test('done tasks show for a day as recentlyDone and are pruned after two weeks', async () => {
   const s = fresh(); const { added } = await addTasks(s, { tasks: [{ title: 'A', category: 'thuis' }, { title: 'B', category: 'thuis' }] }, NOW);
   await updateTasks(s, { updates: [{ id: added[0].id, done: true }] }, NOW);
   const d = await dashboard(s, NOW + 3600_000);
   assert.deepEqual(d.recentlyDone.map(x => x.title), ['A']); assert.equal(d.tasks.length, 1);
   assert.equal((await dashboard(s, NOW + 25 * 3600_000)).recentlyDone.length, 0);
-  await updateTasks(s, { updates: [{ id: added[1].id, title: 'B2' }] }, NOW + 4 * 24 * 3600_000);
-  assert.deepEqual((await s.tasks()).map(t => t.title), ['B2'], 'A (done 4 days ago) is gone');
+  await updateTasks(s, { updates: [{ id: added[1].id, title: 'B2' }] }, NOW + 5 * 24 * 3600_000);
+  assert.deepEqual((await s.tasks()).map(t => t.title).sort(), ['A', 'B2'], 'A (done 5 days ago) is still there for the week review');
+  await updateTasks(s, { updates: [{ id: added[1].id, title: 'B3' }] }, NOW + 15 * 24 * 3600_000);
+  assert.deepEqual((await s.tasks()).map(t => t.title), ['B3'], 'A (done 15 days ago) is gone');
 });
 test('reorder_tasks puts these first, in order; unknown or duplicate ids are refused', async () => {
   const s = fresh(); const { added } = await addTasks(s, { tasks: ['A', 'B', 'C', 'D'].map(title => ({ title, category: 'thuis' })) }, NOW);
@@ -151,7 +153,7 @@ test('mcp: initialize, list, a braindump through add_tasks and the dashboard bac
   assert.equal(init.result.protocolVersion, '2025-03-26'); assert.match(init.result.instructions, /Braindump/);
   assert.equal(((await (await mcp(s, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '1999-01-01' } })).json()) as any).result.protocolVersion, '2025-06-18');
   const list = await (await mcp(s, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).json() as any;
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ['dashboard', 'add_tasks', 'update_tasks', 'reorder_tasks', 'appointment']);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ['dashboard', 'add_tasks', 'update_tasks', 'reorder_tasks', 'log_time', 'time_log', 'edit_time', 'mark_booked', 'week_review', 'appointment']);
   for (const t of list.result.tools) assert.equal(t.inputSchema.type, 'object');
   const added = await text(await mcp(s, call(3, 'add_tasks', { tasks: [{ title: 'Naar oma', category: 'prive', due: '2026-10-17 18:00', note: 'Fiets meenemen' }] })));
   assert.equal(added.added.length, 1);
@@ -163,7 +165,7 @@ test('mcp: input mistakes come back as text for Claude, our own errors stay gene
   const bad = await (await mcp(s, call(1, 'add_tasks', { tasks: [{ title: 'Bellen om 18:00', category: 'werk' }] }))).json() as any;
   assert.equal(bad.result.isError, true); assert.match(bad.result.content[0].text, /^Ongeldig: item 1: .*due/);
   const down = async () => { throw new Error('redis password=hunter2 down'); };
-  const broken: Store = { tasks: down, putTasks: down, deleteTasks: down, appointment: down, setAppointment: down };
+  const broken: Store = { tasks: down, putTasks: down, deleteTasks: down, appointment: down, setAppointment: down, entries: down, putEntries: down, deleteEntries: down };
   const r = await (await mcp(broken, call(2, 'dashboard'))).json() as any;
   assert.equal(r.result.isError, true); assert.ok(!JSON.stringify(r).includes('hunter2'));
 });

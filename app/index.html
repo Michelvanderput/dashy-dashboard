@@ -18,6 +18,14 @@
 :root{--bg:#e8e6e0;--card:#f4f3ee;--ink:#17181a;--line:rgba(23,24,26,.24)}
 @media (prefers-color-scheme:dark){:root{--bg:#080809;--card:#121214;--ink:#eeece8;--line:rgba(255,255,255,.2)}}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:400 1rem/1.45 "Geist Variable",system-ui,sans-serif}
+html,body{transition:background-color .8s ease,color .8s ease}
+/* free time (after the working day, days off): warmer */
+:root[data-mode="free"]{--bg:#f1e5d6;--card:#f9f0e4;--ink:#2b1e13;--line:rgba(43,30,19,.24)}
+@media (prefers-color-scheme:dark){:root[data-mode="free"]{--bg:#18110b;--card:#211812;--ink:#f4e9dc;--line:rgba(244,233,220,.2)}}
+@media (prefers-reduced-motion:reduce){html,body{transition:none}}
+/* kiosk (?kiosk=1): a screen to look at, not to touch */
+html.kiosk,html.kiosk *{cursor:none!important}
+html.kiosk{font-size:clamp(16px,2.4vmin,32px)}
 button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .sr{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>

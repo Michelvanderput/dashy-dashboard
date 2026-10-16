@@ -19,3 +19,8 @@ export declare function adoptTasksHash(hash: string, store: KeyValueStore): {
 };
 export declare function loadTasksConnection(store: KeyValueStore): TasksConnection | null;
 export declare const forgetTasksConnection: (store: KeyValueStore) => void;
+/**
+ * For windows without an address bar (the Mac app): accept what the user pastes, either the whole link
+ * (https://<app>/#tasks=...&key=...&act=...) or just the part from the #. Returns true when it was a valid link and is now remembered.
+ */
+export declare function adoptPastedLink(text: string, store: KeyValueStore): boolean;

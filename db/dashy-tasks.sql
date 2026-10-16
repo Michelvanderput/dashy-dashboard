@@ -24,3 +24,17 @@ create table if not exists public.dashy_appointment (
   ends_at  bigint
 );
 alter table public.dashy_appointment enable row level security;
+
+-- Hours (time spent per project) for the screen and Claude. Run this part once more if you set up the tables earlier.
+create table if not exists public.dashy_time (
+  id          text primary key check (id ~ '^[A-Za-z0-9_-]{1,64}$'),
+  day         text not null check (day ~ '^\d{4}-\d{2}-\d{2}$'),
+  project     text check (project is null or char_length(project) <= 60),
+  description text not null check (char_length(description) between 1 and 120),
+  minutes     int  not null check (minutes between 1 and 960),
+  booked      boolean not null default false,
+  task_id     text,
+  created_at  bigint not null
+);
+create index if not exists dashy_time_day on public.dashy_time (day);
+alter table public.dashy_time enable row level security;

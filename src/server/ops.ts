@@ -1,24 +1,25 @@
 /** The operations on the task list. Validate everything first, then write: a batch with one bad item changes nothing. */
-import { BATCH_MAX, TITLE_MAX, checkCategory, checkNote, checkTitle, InputError, newId, parseDue, type Task } from './model.js';
+import { BATCH_MAX, TITLE_MAX, checkCategory, checkDescription, checkMinutes, checkNote, checkProject, checkTitle, InputError, newId, parseDay, parseDue, relativeDay, type Task, type TimeEntry } from './model.js';
+import { addDays, localParts, startOfDay, zonedToEpoch, TIME_ZONE } from './time.js';
 import { buildState, type Appointment, type StateBody, type WorkdayConfig } from './plan.js';
 import type { Store } from './store.js';
 
-const DONE_KEEP_MS = 3 * 24 * 3600_000;
+const DONE_KEEP_MS = 14 * 24 * 3600_000; // two weeks: the week review looks back over a whole week
 const obj = (v: unknown, what: string): Record<string, unknown> => { if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new InputError(`${what} moet een object zijn`); return v as Record<string, unknown>; };
 const list = (v: unknown, what: string, max = BATCH_MAX): unknown[] => { if (!Array.isArray(v) || v.length < 1) throw new InputError(`${what} moet een lijst met minstens 1 item zijn`); if (v.length > max) throw new InputError(`${what}: maximaal ${max} per keer`); return v; };
 const known = (o: Record<string, unknown>, keys: string[], where: string) => { for (const k of Object.keys(o)) if (!keys.includes(k)) throw new InputError(`${where}: onbekend veld "${k}"`); };
 const at = (i: number, msg: string) => { throw new InputError(`item ${i + 1}: ${msg}`); };
 const wrap = <T>(i: number, f: () => T): T => { try { return f(); } catch (e) { if (e instanceof InputError) return at(i, e.message); throw e; } };
 
-/** Drops done tasks older than three days. Called after every write. */
+/** Drops done tasks older than two weeks. Called after every write. */
 async function prune(store: Store, all: Task[], now: number) {
   const old = all.filter(t => t.done && t.doneAt !== null && now - t.doneAt > DONE_KEEP_MS).map(t => t.id);
   if (old.length) await store.deleteTasks(old);
 }
 
 export async function dashboard(store: Store, now: number, workday?: WorkdayConfig): Promise<StateBody> {
-  const [all, appt] = await Promise.all([store.tasks(), store.appointment()]);
-  return buildState(all, appt, now, undefined, workday);
+  const [all, appt, entries] = await Promise.all([store.tasks(), store.appointment(), store.entries()]);
+  return buildState(all, appt, now, undefined, workday, entries);
 }
 
 export async function addTasks(store: Store, input: unknown, now: number): Promise<{ added: { id: string; title: string }[] }> {
@@ -96,4 +97,126 @@ export async function setDone(store: Store, id: string, done: boolean, now: numb
   if (t.done === done) return true;
   await store.putTasks([{ ...t, done, doneAt: done ? now : null }]);
   return true;
+}
+
+// ---------------------------------------------------------------- hours
+
+const ENTRIES_MAX = 20;
+const BOOKED_KEEP_DAYS = 120;
+/** Drops booked entries older than 120 days. Unbooked ones stay until they are booked. */
+async function pruneEntries(store: Store, all: TimeEntry[], now: number) {
+  const cutoff = relativeDay(now, -BOOKED_KEEP_DAYS);
+  const old = all.filter(e => e.booked && e.day < cutoff).map(e => e.id);
+  if (old.length) await store.deleteEntries(old);
+}
+const sumMin = (es: TimeEntry[]) => es.reduce((a, e) => a + e.minutes, 0);
+const perProject = (es: TimeEntry[]) => {
+  const m = new Map<string | null, [number, number]>();
+  for (const e of es) { const c = m.get(e.project) ?? [0, 0]; c[0] += e.minutes; if (!e.booked) c[1] += e.minutes; m.set(e.project, c); }
+  return [...m.entries()].map(([p, [min, un]]) => [p, min, un] as [string | null, number, number]).sort((a, b) => b[1] - a[1]);
+};
+
+/** Time spent: "2 hours for client A on the report". A batch with one bad entry changes nothing. */
+export async function logTime(store: Store, input: unknown, now: number): Promise<{ logged: { id: string; day: string; project: string | null; minutes: number }[]; vandaag_min: number }> {
+  const items = list(obj(input, 'invoer').entries, 'entries', ENTRIES_MAX);
+  const [tasks, all] = await Promise.all([store.tasks(), store.entries()]);
+  const taken = new Set(all.map(e => e.id)), today = localParts(now).date;
+  const made = items.map((raw, i): TimeEntry => wrap(i, () => {
+    const o = obj(raw, 'entry'); known(o, ['minutes', 'description', 'project', 'day', 'task'], 'entry');
+    const task = o.task === undefined ? null : tasks.find(t => t.id === o.task);
+    if (o.task !== undefined && !task) throw new InputError(`taak ${String(o.task)} bestaat niet`);
+    if (o.description === undefined && !task) throw new InputError('description is nodig (of een task om de omschrijving van over te nemen)');
+    const id = newId(taken); taken.add(id);
+    return { id, day: o.day === undefined ? today : parseDay(o.day, now), project: o.project === undefined || o.project === null ? null : checkProject(o.project), description: o.description === undefined ? task!.title : checkDescription(o.description), minutes: checkMinutes(o.minutes), booked: false, taskId: task?.id ?? null, createdAt: now };
+  }));
+  await store.putEntries(made);
+  await pruneEntries(store, all, now);
+  return { logged: made.map(e => ({ id: e.id, day: e.day, project: e.project, minutes: e.minutes })), vandaag_min: sumMin([...all, ...made].filter(e => e.day === today)) };
+}
+
+/** Correct an entry: other minutes or project, move it to another day, or remove it. */
+export async function editTime(store: Store, input: unknown, now: number): Promise<{ updated: string[]; removed: string[] }> {
+  const items = list(obj(input, 'invoer').edits, 'edits', ENTRIES_MAX);
+  const all = await store.entries(), byId = new Map(all.map(e => [e.id, e]));
+  const put = new Map<string, TimeEntry>(), del: string[] = [];
+  items.forEach((raw, i) => wrap(i, () => {
+    const o = obj(raw, 'edit'); known(o, ['id', 'minutes', 'project', 'description', 'day', 'booked', 'remove'], 'edit');
+    const cur = typeof o.id === 'string' ? byId.get(o.id) : undefined;
+    if (!cur) throw new InputError(`uren-regel ${String(o.id)} bestaat niet (haal time_log opnieuw op)`);
+    if (o.remove === true) { del.push(cur.id); put.delete(cur.id); return; }
+    const e = { ...(put.get(cur.id) ?? cur) };
+    if (o.minutes !== undefined) e.minutes = checkMinutes(o.minutes);
+    if (o.project !== undefined) e.project = o.project === null ? null : checkProject(o.project);
+    if (o.description !== undefined) e.description = checkDescription(o.description);
+    if (o.day !== undefined) e.day = parseDay(o.day, now);
+    if (o.booked !== undefined) { if (typeof o.booked !== 'boolean') throw new InputError('booked moet true of false zijn'); e.booked = o.booked; }
+    put.set(e.id, e);
+  }));
+  await store.putEntries([...put.values()]); await store.deleteEntries(del);
+  return { updated: [...put.keys()], removed: del };
+}
+
+/** After booking the hours in the time sheet: mark them. By ids, or a whole day (optionally one project). */
+export async function markBooked(store: Store, input: unknown, now: number): Promise<{ gemarkeerd: number; min: number }> {
+  const o = obj(input, 'invoer'); known(o, ['ids', 'day', 'project', 'booked'], 'invoer');
+  if (o.ids === undefined && o.day === undefined) throw new InputError('geef ids of een day');
+  if (o.booked !== undefined && typeof o.booked !== 'boolean') throw new InputError('booked moet true of false zijn');
+  const booked = o.booked !== false, all = await store.entries();
+  let pick: TimeEntry[];
+  if (o.ids !== undefined) {
+    const ids = list(o.ids, 'ids', 100).map((x, i) => typeof x === 'string' ? x : at(i, 'id moet tekst zijn'));
+    const missing = ids.filter(id => !all.some(e => e.id === id)); if (missing.length) throw new InputError(`geen uren-regel met id: ${missing.join(', ')}`);
+    pick = all.filter(e => ids.includes(e.id));
+  } else {
+    const day = parseDay(o.day, now), project = o.project === undefined ? undefined : checkProject(o.project);
+    pick = all.filter(e => e.day === day && (project === undefined || e.project === project));
+  }
+  await store.putEntries(pick.map(e => ({ ...e, booked })));
+  return { gemarkeerd: pick.length, min: sumMin(pick) };
+}
+
+/** One day of hours, compact: [id, project, description, minutes, booked]. Default today. */
+export async function timeLog(store: Store, input: unknown, now: number) {
+  const o = obj(input ?? {}, 'invoer'); known(o, ['day'], 'invoer');
+  const today = localParts(now).date, day = o.day === undefined ? today : parseDay(o.day, now);
+  const all = await store.entries(), mine = all.filter(e => e.day === day).sort((a, b) => a.createdAt - b.createdAt);
+  return {
+    day, regels: mine.map(e => [e.id, e.project, e.description, e.minutes, e.booked]), regels_format: '[id, project, omschrijving, minuten, geboekt]',
+    totaal_min: sumMin(mine), te_boeken_min: sumMin(mine.filter(e => !e.booked)), per_project: perProject(mine), per_project_format: '[project, minuten, nog te boeken]',
+    eerder_te_boeken_min: sumMin(all.filter(e => e.day < today && !e.booked)),
+  };
+}
+
+// ---------------------------------------------------------------- the week review
+
+const DAY_NAMES = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+const dateOf = (y: number, m: number, d: number, n: number) => { const x = addDays(y, m, d, n); return `${x.y}-${String(x.mo).padStart(2, '0')}-${String(x.d).padStart(2, '0')}`; };
+const epochOf = (date: string) => { const [y, m, d] = date.split('-').map(Number); return zonedToEpoch(y, m, d, 0, 0, TIME_ZONE) ?? startOfDay(zonedToEpoch(y, m, d, 12, 0, TIME_ZONE)!); };
+
+/**
+ * The facts of a week (Monday to Sunday), for the story Claude writes in the buddy's voice: what got done (per category, per day, per part of
+ * the day), the hours per project, and what is still open from that week. No judgement and no score in here on purpose.
+ */
+export async function weekReview(store: Store, input: unknown, now: number) {
+  const o = obj(input ?? {}, 'invoer'); known(o, ['week_of'], 'invoer');
+  const anchor = o.week_of === undefined ? localParts(now).date : parseDay(o.week_of, now, TIME_ZONE, 7); // any date in the week, also later this week
+  const [ay, am, ad] = anchor.split('-').map(Number), wd = localParts(zonedToEpoch(ay, am, ad, 12, 0)!).weekday;
+  const monday = dateOf(ay, am, ad, -((wd + 6) % 7)), [my, mm, md] = monday.split('-').map(Number);
+  const days = DAY_NAMES.map((_, i) => dateOf(my, mm, md, i)), nextMonday = dateOf(my, mm, md, 7);
+  const from = epochOf(monday), to = epochOf(nextMonday);
+  const [tasks, entries] = await Promise.all([store.tasks(), store.entries()]);
+  const done = tasks.filter(t => t.done && t.doneAt !== null && t.doneAt >= from && t.doneAt < to).sort((a, b) => a.doneAt! - b.doneAt!);
+  const perCategory: Record<string, number> = {}; for (const t of done) perCategory[t.category] = (perCategory[t.category] ?? 0) + 1;
+  const perDay = Object.fromEntries(DAY_NAMES.map(n => [n, 0])) as Record<string, number>, perPart = { ochtend: 0, middag: 0, avond: 0 };
+  for (const t of done) {
+    const p = localParts(t.doneAt!), i = days.indexOf(p.date); if (i >= 0) perDay[DAY_NAMES[i]]++;
+    perPart[p.h < 12 ? 'ochtend' : p.h < 18 ? 'middag' : 'avond']++;
+  }
+  const mine = entries.filter(e => e.day >= monday && e.day < nextMonday), today0 = startOfDay(now);
+  return {
+    week: { van: monday, tot: days[6], loopt_nog: localParts(now).date >= monday && localParts(now).date < nextMonday },
+    gedaan: { totaal: done.length, per_categorie: perCategory, per_dag: perDay, per_dagdeel: perPart, titels: done.slice(-12).map(t => t.title) },
+    uren: { totaal_min: sumMin(mine), te_boeken_min: sumMin(mine.filter(e => !e.booked)), per_project: perProject(mine), per_project_format: '[project, minuten, nog te boeken]' },
+    nog_open_uit_deze_week: tasks.filter(t => !t.done && t.dueAt !== null && t.dueAt >= from && t.dueAt < to && t.dueAt < today0).length,
+  };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { parseDashboard, snapshotEvents, TASK_DRIVER_CONFIG, type DashboardSnapshot } from '../tasks';
+import { FREE_TIME_DRIVER_CONFIG, parseDashboard, snapshotEvents, TASK_DRIVER_CONFIG, type DashboardSnapshot } from '../tasks';
 import { useStateDriver } from './useStateDriver';
 import type { Resolution } from '../driver';
 
@@ -31,9 +31,9 @@ export const UNDO_MS = 8000;
 
 /** Polls the dashboard and feeds the changes to the driver, so Dashy's state follows your real tasks. A failed poll keeps the last picture and shows an error text; it never throws. */
 export function useDashyTasks({ url, token, actionUrl, actionToken, intervalMs = 10_000, fetch: f }: UseDashyTasksOptions): DashyTasks {
-  const driver = useStateDriver(TASK_DRIVER_CONFIG);
-  const dispatch = useRef(driver.dispatch); dispatch.current = driver.dispatch;
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
+  const driver = useStateDriver(snapshot?.mode === 'free' ? FREE_TIME_DRIVER_CONFIG : TASK_DRIVER_CONFIG);
+  const dispatch = useRef(driver.dispatch); dispatch.current = driver.dispatch;
   const [error, setError] = useState<string | null>(null);
   const prev = useRef<DashboardSnapshot | null>(null);
   const [justDone, setJustDone] = useState<{ id: string; title: string } | null>(null);

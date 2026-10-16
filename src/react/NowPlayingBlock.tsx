@@ -34,6 +34,8 @@ export interface NowPlayingBlockProps {
   needsReconnect?: boolean;
   /** Why the last control did not work (shown quietly under the controls). */
   controlError?: string;
+  /** Only look: no menu, no controls, no buttons (a screen on the charger). */
+  kiosk?: boolean;
   /** Message to show with status "error". */
   error?: string;
   className?: string;
@@ -208,7 +210,7 @@ let uid = 0;
  * dances next to it (his motion comes from core.ts, not from this component). Spotify's rules for the cover are followed:
  * shown whole and unaltered (not cropped, covered or animated), 4 px corners (8 px from 300 px up), and a link back to Spotify. The record colour is picked per album from a fixed palette; the cover is never used on the label.
  */
-export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, onControl, canControl, needsReconnect, controlError, driver = CALM, size = 160, bare = false, showDashy = true, error, className, style }: NowPlayingBlockProps) {
+export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, onControl, canControl, needsReconnect, controlError, kiosk = false, driver = CALM, size = 160, bare = false, showDashy = true, error, className, style }: NowPlayingBlockProps) {
   const [id] = useState(() => `dnp-label-${++uid}`);
   const [coverFailed, setCoverFailed] = useState(false);
   const playing = !!np?.playing;
@@ -220,7 +222,7 @@ export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConn
   const color = vinylColor(np ? `${np.album}|${np.artists[0] ?? ''}` : 'idle');
   const artists = np?.artists.join(', ') ?? '';
   // the "..." menu holds the link to the track and disconnect; while not connected, "connect" stays a visible button
-  const menu = status === 'connected' && !!(np?.trackUrl || onDisconnect);
+  const menu = !kiosk && status === 'connected' && !!(np?.trackUrl || onDisconnect);
 
   return (
     <section className={`dnp${bare ? ' dnp-bare' : ''}${menu ? ' dnp-hasmenu' : ''}${className ? ' ' + className : ''}`} data-playing={playing} data-paused={!!np && !playing} data-status={status}
@@ -247,9 +249,9 @@ export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConn
             {artists && <p className="dnp-artist">{artists}</p>}
             <p className="dnp-note" role="status">{playing ? 'Speelt nu' : 'Gepauzeerd'}</p>
             <Progress np={np} playing={playing} />
-            {onControl && canControl && <Controls playing={playing} onControl={onControl} />}
-            {needsReconnect && onConnect && <button type="button" className="dnp-btn" onClick={onConnect}>Koppel opnieuw voor bediening</button>}
-            {controlError && <p className="dnp-hint" aria-live="polite">{controlError}</p>}
+            {!kiosk && onControl && canControl && <Controls playing={playing} onControl={onControl} />}
+            {!kiosk && needsReconnect && onConnect && <button type="button" className="dnp-btn" onClick={onConnect}>Koppel opnieuw voor bediening</button>}
+            {!kiosk && controlError && <p className="dnp-hint" aria-live="polite">{controlError}</p>}
           </>
         ) : status === 'connected' ? (
           <p className="dnp-title">Er speelt niets</p>
@@ -264,7 +266,7 @@ export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConn
           {np && spotifyLogoSrc && (np.trackUrl
             ? <a href={np.trackUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in Spotify"><img className="dnp-logo" src={spotifyLogoSrc} alt="Spotify" width={70} /></a>
             : <img className="dnp-logo" src={spotifyLogoSrc} alt="Spotify" width={70} />)}
-          {status !== 'connected' && status !== 'connecting' && onConnect && <button type="button" className="dnp-btn" onClick={onConnect}>Verbind met Spotify</button>}
+          {!kiosk && status !== 'connected' && status !== 'connecting' && onConnect && <button type="button" className="dnp-btn" onClick={onConnect}>Verbind met Spotify</button>}
         </div>
       </div>
     </section>
