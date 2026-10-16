@@ -22,6 +22,8 @@ export interface TaskBoardProps {
   notes?: string[];
   /** Smaller, for a low screen. */
   compact?: boolean;
+  /** How much to leave out so it fits: 0 all, 1 smaller, 2 also no list, 3 also no note, 4 only the title. Set by the page (useFit). */
+  level?: number;
   style?: CSSProperties;
 }
 
@@ -58,6 +60,8 @@ const CSS = `
 .tb-foot{display:grid;gap:2px;font-size:.85rem;opacity:.65;justify-items:start}
 .tb-toast{margin:0;padding:10px 14px;border-radius:14px;background:var(--card);border:1px solid var(--line);animation:tb-in .3s both}
 .tb-link{background:none;border:0;padding:0;font:inherit;text-decoration:underline;color:inherit;cursor:pointer}
+.tb-l2 .tb-next,.tb-l2 .tb-more,.tb-l2 .tb-sub{display:none}.tb-l3 .tb-note,.tb-l3 .tb-foot{display:none}.tb-l3 .tb-title{font-size:1.2rem;-webkit-line-clamp:2}
+.tb-l4 .tb-label,.tb-l4 .tb-meta,.tb-l4 .tb-toast{display:none}.tb-l4 .tb-hero{padding:8px 12px 8px 18px;gap:4px}.tb-l4 .tb-title{font-size:1.05rem;-webkit-line-clamp:1}.tb-l4 .tb-done{min-height:36px;margin:0;padding:0 16px;font-size:.95rem}
 .tb-compact{gap:10px}
 .tb-compact .tb-hero{gap:6px;padding:12px 14px 12px 20px;border-radius:20px}
 .tb-compact .tb-title{font-size:1.5rem}.tb-compact .tb-note{display:none}
@@ -74,14 +78,15 @@ const when = (t: DashTask, now: number) => taskTiming(t, now).chip ?? '';
  * The tasks, built to be read from across a room: what to do now, big, with its time and its note and one big button; then what comes after.
  * Calm on purpose: a time that has passed says "nog open", and nothing here counts what you did not do.
  */
-export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftOpen = 0, doneToday = 0, onComplete, justDone, onUndo, notes = [], compact = false, style }: TaskBoardProps) {
+export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftOpen = 0, doneToday = 0, onComplete, justDone, onUndo, notes = [], compact = false, level = 0, style }: TaskBoardProps) {
+  compact = compact || level >= 1;
   const live = useMinute();
   const now = fixed ?? live;
   const hero = tasks.find(t => t.state === 'now') ?? null;
   const rest = tasks.filter(t => t !== hero), max = compact ? 2 : 3, next = rest.slice(0, max), more = rest.length - next.length;
   const timing = hero ? taskTiming(hero, now) : null;
   return (
-    <section aria-label="Taken" className={`tb${compact ? ' tb-compact' : ''}`} style={style}>
+    <section aria-label="Taken" className={`tb${compact ? ' tb-compact' : ''}${level >= 2 ? ' tb-l2' : ''}${level >= 3 ? ' tb-l3' : ''}${level >= 4 ? ' tb-l4' : ''}`} style={style}>
       <style>{CSS}</style>
       {justDone && (
         <p className="tb-toast" role="status">✓ {justDone.title}{onUndo && <> · <button type="button" className="tb-link" onClick={() => void onUndo()}>Ongedaan maken</button></>}</p>

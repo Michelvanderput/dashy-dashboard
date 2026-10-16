@@ -64,3 +64,11 @@ test('nowTask: the first task whose state is now, or null', () => {
   assert.equal(nowTask({ tasks: [t('a', 'later'), t('b', 'now')] } as never)?.id, 'b');
   assert.equal(nowTask({ tasks: [t('a', 'later')] } as never), null);
 });
+
+import { readFileSync } from 'node:fs';
+test('a dashboard never scrolls: the page is locked to the screen and every block is clipped, not stretched', () => {
+  const css = readFileSync(new URL('../app/index.html', import.meta.url), 'utf8');
+  assert.match(css, /html,body\{[^}]*height:100%;overflow:hidden/);
+  assert.match(css, /\.dash\{[^}]*height:100dvh;overflow:hidden/);
+  assert.doesNotMatch(css, /min-height:100dvh/);
+});

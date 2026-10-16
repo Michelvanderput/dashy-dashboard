@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useSpotify, useWakeLock } from '../src/react';
+import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useFit, useSpotify, useWakeLock } from '../src/react';
 import { burnInOffset, isKiosk, parsePlace, type DashyState } from '../src';
 
 import { initialConnection } from './storage';
@@ -42,6 +42,10 @@ export function App() {
   // free time: after the working day and on days off the whole screen turns warmer (see the styles in index.html)
   const mode = snap?.mode ?? 'work';
   useEffect(() => { document.documentElement.dataset.mode = mode; return () => { delete document.documentElement.dataset.mode; }; }, [mode]);
+  // nothing scrolls: when a block does not fit, it shows less (see useFit)
+  const fitKey = `${snap?.tasks.map(t => t.id).join()}|${snap?.appointment?.at}|${!!nowPlaying}|${low}|${kiosk}`;
+  const fitLeft = useFit<HTMLDivElement>(2, fitKey), fitMusic = useFit<HTMLElement>(3, fitKey);
+  const fitTasks = useFit<HTMLDivElement>(4, `${fitKey}|${fitLeft.level}|${fitMusic.level}`);
   const notes = [
     ...(tasks.lastOkAt && tasks.stale && !tasks.error ? [`Niet bijgewerkt sinds ${new Date(tasks.lastOkAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`] : []),
     ...(tasks.error ? [tasks.error] : []),
@@ -55,20 +59,20 @@ export function App() {
         <WeatherView place={PLACE} compact={low} />
       </header>
 
-      <div className="dash-left">
+      <div className="dash-left" ref={fitLeft.ref}>
         <section aria-labelledby="av" className="dash-avatar">
           <h2 id="av" className="sr">Avatar</h2>
-          <div style={{ width: '100%', maxWidth: low ? 'min(30rem, 30vh)' : 'min(26rem, 38vh)', minWidth: '9rem', aspectRatio: '1' }}><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
+          <div><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
         </section>
         <div className="dash-day">
-          {tasks.connected && snap && <DayPanel appointment={snap.appointment} workday={snap.workday} />}
-          {tasks.connected && snap && <HoursPanel hours={snap.hours} workday={snap.workday} compact={low} style={{ marginTop: low ? 8 : 12 }} />}
+          {tasks.connected && snap && fitLeft.level < 2 && <DayPanel appointment={snap.appointment} workday={snap.workday} />}
+          {tasks.connected && snap && fitLeft.level < 1 && <HoursPanel hours={snap.hours} workday={snap.workday} compact={low} style={{ marginTop: low ? 8 : 12 }} />}
         </div>
       </div>
 
-      <div className="dash-tasks">
+      <div className="dash-tasks" ref={fitTasks.ref}>
         {tasks.connected && snap ? (
-          <TaskBoard tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} notes={notes}
+          <TaskBoard tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} level={fitTasks.level} notes={notes}
             onComplete={!kiosk ? tasks.complete : undefined} justDone={!kiosk ? tasks.justDone : null} onUndo={!kiosk ? tasks.undo : undefined} />
         ) : tasks.connected ? (
           <p role="status" style={{ margin: 0, opacity: .6 }}>{tasks.error ?? 'Taken laden…'}</p>
@@ -77,11 +81,11 @@ export function App() {
         )}
       </div>
 
-      {showMusic && <section aria-labelledby="mu" className="dash-music" style={card}>
+      {showMusic && fitMusic.level < 3 && <section aria-labelledby="mu" className="dash-music" style={card} ref={fitMusic.ref}>
         <h2 id="mu" className="sr">Muziek</h2>
-        <NowPlayingBlock bare showDashy={false} nowPlaying={nowPlaying} status={spotifyId ? sp.status : 'error'} size={low ? 'min(26vmin,100px)' : 'min(40vmin,180px)'}
+        <NowPlayingBlock bare showDashy={false} nowPlaying={nowPlaying} status={spotifyId ? sp.status : 'error'} size={low || fitMusic.level === 1 ? 'min(22vmin,96px)' : fitMusic.level >= 2 ? '56px' : 'min(40vmin,180px)'}
           kiosk={kiosk} onConnect={spotifyId ? sp.connect : undefined} onDisconnect={spotifyId ? sp.disconnect : undefined} onControl={spotifyId ? sp.control : undefined} canControl={sp.canControl} needsReconnect={sp.needsReconnect} controlError={sp.controlError} error={spotifyId ? sp.error : 'Spotify is nog niet gekoppeld: zet VITE_SPOTIFY_CLIENT_ID (zie README).'} spotifyLogoSrc={env.VITE_SPOTIFY_LOGO} />
-        {!kiosk && spotifyId && sp.status !== 'connected' && (
+        {!kiosk && fitMusic.level < 1 && spotifyId && sp.status !== 'connected' && (
           <p style={{ margin: 0, fontSize: '.8rem', opacity: .7, textAlign: 'center', overflowWrap: 'anywhere' }}>
             Deze app stuurt Spotify terug naar <code>{redirectUri}</code>. Precies dit adres moet bij Redirect URIs in je Spotify-app staan.
           </p>

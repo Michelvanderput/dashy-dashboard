@@ -25,3 +25,4 @@ export { WeatherIcon } from './WeatherIcon';
 export { TaskBoard, CATEGORY } from './TaskBoard';
 export type { TaskBoardProps } from './TaskBoard';
 export { useMinute } from './useMinute';
+export { useFit } from './useFit';
