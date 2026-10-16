@@ -5,6 +5,7 @@
  */
 import { addTasks, dashboard, editTime, logTime, markBooked, reorderTasks, setAppointment, setDone, timeLog, updateTasks, weekReview } from './ops.js';
 import { authorized, tokenOf } from './auth.js';
+import { currentPairing } from './pair.js';
 import { InputError, BATCH_MAX, CATEGORIES, NOTE_MAX, TITLE_MAX } from './model.js';
 import type { Store } from './store.js';
 import type { WorkdayConfig } from './plan.js';
@@ -18,7 +19,7 @@ Dagplanning: kijk naar leftOpen (taken van een eerdere dag die nog openstaan). B
 Toon: Nederlands, rustig, warm, concreet. Geen schuld, geen cijfers of streaks, hooguit twee korte zinnen met één concrete stap.`;
 
 const str = (extra: object = {}) => ({ type: 'string', ...extra });
-const TOOLS: Record<string, { description: string; inputSchema: object; run: (s: Store, a: unknown, now: number, workday?: WorkdayConfig) => Promise<unknown> }> = {
+const TOOLS: Record<string, { description: string; inputSchema: object; run: (s: Store, a: unknown, now: number, workday?: WorkdayConfig, secret?: string) => Promise<unknown> }> = {
   dashboard: {
     description: 'Open taken in volgorde (state "now" = Nu, "later" = Straks), leftOpen, wat net klaar is, de afspraak en de werkdag (workday). Tijden zijn epoch ms (dueAt) plus hasTime.',
     inputSchema: { type: 'object', properties: {} },
@@ -64,6 +65,11 @@ const TOOLS: Record<string, { description: string; inputSchema: object; run: (s:
     inputSchema: { type: 'object', properties: { week_of: str() } },
     run: (s, a, now) => weekReview(s, a, now),
   },
+  pairing_code: {
+    description: 'Een koppelcode om een nieuw scherm te koppelen zonder lange link: de gebruiker typt de code op het scherm. De code werkt 10 tot 20 minuten. Geef hem door met de tijd erbij, deel hem verder met niemand.',
+    inputSchema: { type: 'object', properties: {} },
+    run: async (_s, _a, now, _w, secret) => { if (!secret) throw new InputError('Koppelcodes staan hier niet aan'); return currentPairing(secret, now); },
+  },
   appointment: {
     description: 'De eerstvolgende afspraak van vandaag (één tegelijk). start en end zijn Nederlandse tijd, "YYYY-MM-DD HH:mm" of "HH:mm". clear:true wist hem.',
     inputSchema: { type: 'object', properties: { title: str({ maxLength: TITLE_MAX }), start: str(), end: str(), clear: { type: 'boolean' } } },
@@ -77,7 +83,7 @@ const reply = (id: Rpc['id'], result: unknown) => ({ jsonrpc: '2.0', id: id ?? n
 const fail = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 
-async function one(msg: Rpc, store: Store, now: number, workday?: WorkdayConfig): Promise<object | null> {
+async function one(msg: Rpc, store: Store, now: number, workday?: WorkdayConfig, secret?: string): Promise<object | null> {
   if (typeof msg !== 'object' || msg === null || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return fail((msg as Rpc | null)?.id, -32600, 'Invalid Request');
   if (msg.id === undefined) return null; // notification: no reply
   switch (msg.method) {
@@ -91,7 +97,7 @@ async function one(msg: Rpc, store: Store, now: number, workday?: WorkdayConfig)
       const name = msg.params?.name, tool = typeof name === 'string' && Object.prototype.hasOwnProperty.call(TOOLS, name) ? TOOLS[name] : null;
       if (!tool) return fail(msg.id, -32602, `Onbekende tool: ${String(name)}`);
       try {
-        const out = await tool.run(store, msg.params?.arguments ?? {}, now, workday);
+        const out = await tool.run(store, msg.params?.arguments ?? {}, now, workday, secret);
         return reply(msg.id, { content: [{ type: 'text', text: JSON.stringify(out) }] });
       } catch (e) {
         // Input mistakes go back to Claude as text so it can fix them; anything else is ours and stays generic.
@@ -120,10 +126,10 @@ export async function handleMcp(req: Request, d: McpDeps): Promise<Response> {
   const now = d.now();
   if (Array.isArray(body)) {
     if (body.length === 0 || body.length > 20) return json(fail(null, -32600, 'Invalid Request'), 400);
-    const out = (await Promise.all(body.map(m => one(m, d.store!, now, d.workday)))).filter(x => x !== null);
+    const out = (await Promise.all(body.map(m => one(m, d.store!, now, d.workday, d.token)))).filter(x => x !== null);
     return out.length ? json(out) : new Response(null, { status: 202 });
   }
-  const out = await one(body as Rpc, d.store, now, d.workday);
+  const out = await one(body as Rpc, d.store, now, d.workday, d.token);
   return out ? json(out) : new Response(null, { status: 202 });
 }
 

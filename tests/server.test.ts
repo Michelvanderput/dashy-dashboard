@@ -153,7 +153,7 @@ test('mcp: initialize, list, a braindump through add_tasks and the dashboard bac
   assert.equal(init.result.protocolVersion, '2025-03-26'); assert.match(init.result.instructions, /Braindump/);
   assert.equal(((await (await mcp(s, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '1999-01-01' } })).json()) as any).result.protocolVersion, '2025-06-18');
   const list = await (await mcp(s, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).json() as any;
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ['dashboard', 'add_tasks', 'update_tasks', 'reorder_tasks', 'log_time', 'time_log', 'edit_time', 'mark_booked', 'week_review', 'appointment']);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ['dashboard', 'add_tasks', 'update_tasks', 'reorder_tasks', 'log_time', 'time_log', 'edit_time', 'mark_booked', 'week_review', 'pairing_code', 'appointment']);
   for (const t of list.result.tools) assert.equal(t.inputSchema.type, 'object');
   const added = await text(await mcp(s, call(3, 'add_tasks', { tasks: [{ title: 'Naar oma', category: 'prive', due: '2026-10-17 18:00', note: 'Fiets meenemen' }] })));
   assert.equal(added.added.length, 1);

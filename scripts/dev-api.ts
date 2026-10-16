@@ -5,6 +5,7 @@
  */
 import { createServer } from 'node:http';
 import { handleAction, handleMcp, handleState } from '../src/server/mcp';
+import { handlePair } from '../src/server/pair';
 import { MemoryStore } from '../src/server/store';
 import { workdayFromEnv } from '../src/server/env';
 
@@ -22,6 +23,7 @@ createServer(async (q, r) => {
   const res = path.startsWith('/api/mcp') ? await handleMcp(req, { store, token: mcpToken, now: Date.now, workday: workdayFromEnv(), allowPathToken: path !== '/api/mcp' })
     : path === '/api/action' ? await handleAction(req, { store, token: actionToken, now: Date.now, workday: workdayFromEnv() })
     : path === '/api/state' ? await handleState(req, { store, token: stateToken, now: Date.now, workday: workdayFromEnv() })
+    : path === '/api/pair' ? await handlePair(req, { secret: mcpToken, stateToken, actionToken, now: Date.now })
     : new Response('not found', { status: 404 });
   r.writeHead(res.status, Object.fromEntries(res.headers)); r.end(Buffer.from(await res.arrayBuffer()));
 }).listen(port, '127.0.0.1', () => console.log(`Dashy dev API on http://127.0.0.1:${port}\n  MCP   POST /api/mcp   Bearer ${mcpToken}\n  state GET  /api/state Bearer ${stateToken}\n  act   POST /api/action Bearer ${actionToken}`));

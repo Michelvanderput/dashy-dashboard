@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useFit, useMinute, useSpotify, useWakeLock } from '../src/react';
 import { briefing, burnInOffset, isKiosk, parsePlace, type DashyState } from '../src';
 
+import { PairForm } from './PairForm';
 import { initialConnection } from './storage';
 
 const env = import.meta.env as Record<string, string | undefined>;
@@ -77,7 +78,7 @@ export function App() {
         ) : tasks.connected ? (
           <p role="status" style={{ margin: 0, opacity: .6 }}>{tasks.error ?? 'Taken laden…'}</p>
         ) : (
-          <p style={{ margin: 0, fontSize: '.9rem', opacity: .65, maxWidth: '30rem' }}>Nog niet gekoppeld aan je taken. Open de app eenmalig met <code>#tasks=https://…&amp;key=…&amp;act=…</code> achter het adres.</p>
+          kiosk ? <p role="status" style={{ margin: 0, opacity: .65 }}>Nog niet gekoppeld.</p> : <PairForm />
         )}
       </div>
 

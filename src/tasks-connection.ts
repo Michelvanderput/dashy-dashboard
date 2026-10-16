@@ -48,3 +48,20 @@ export function adoptPastedLink(text: string, store: KeyValueStore): boolean {
   try { hash = t.startsWith('#') ? t : new URL(t).hash; } catch { return false; }
   return adoptTasksHash(hash, store).adopted;
 }
+
+export type PairResult = 'ok' | 'wrong' | 'offline' | 'unavailable';
+/**
+ * Link this screen with a pairing code (Claude's tool `pairing_code`) instead of a long link. Sends the code to `<base>/api/pair`
+ * and remembers the keys it answers with, the same way as the #tasks= link does.
+ */
+export async function pairWithCode(code: string, base: string, store: KeyValueStore, f: typeof fetch = fetch): Promise<PairResult> {
+  try {
+    const res = await f(new URL('/api/pair', base).toString(), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) });
+    if (res.status === 401) return 'wrong';
+    if (!res.ok) return 'unavailable';
+    const v = await res.json() as { url?: unknown; key?: unknown; act?: unknown };
+    if (typeof v.url !== 'string' || typeof v.key !== 'string') return 'unavailable';
+    const p = new URLSearchParams({ tasks: v.url, key: v.key }); if (typeof v.act === 'string') p.set('act', v.act);
+    return adoptTasksHash(`#${p}`, store).adopted ? 'ok' : 'unavailable';
+  } catch { return 'offline'; }
+}
