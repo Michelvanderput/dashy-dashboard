@@ -284,3 +284,57 @@ test('connection: act token adopted, action url derived from the state url, no a
   assert.equal(loadTasksConnection(st)!.actionUrl, null);
   assert.equal(actionUrlOf('https://x.test/api/state?x=1'), 'https://x.test/api/action'); assert.equal(actionUrlOf('https://x.test/dash.json'), null); assert.equal(actionUrlOf('nonsense'), null);
 });
+
+// ---- Supabase over REST, with a fake PostgREST
+import { SupabaseStore } from '../src/server/store';
+import { storeFromEnv } from '../src/server/env';
+function fakePostgrest() {
+  const tasks = new Map<string, any>(); let appt: any = null; const seen: { url: string; headers: Headers; method: string }[] = [];
+  const f = (async (u: string, init: RequestInit) => {
+    const url = new URL(u), h = new Headers(init.headers); seen.push({ url: u, headers: h, method: init.method ?? 'GET' });
+    if (h.get('apikey') !== 'svc-key' || h.get('authorization') !== 'Bearer svc-key') return new Response('{}', { status: 401 });
+    const body = init.body ? JSON.parse(init.body as string) : null, t = url.pathname.split('/').pop();
+    const json = (x: unknown) => new Response(JSON.stringify(x), { status: 200 });
+    if (t === 'dashy_tasks') {
+      if (init.method === 'POST') { for (const r of body) tasks.set(r.id, r); return new Response(null, { status: 201 }); }
+      if (init.method === 'DELETE') { const m = /^in\.\((.*)\)$/.exec(url.searchParams.get('id') ?? '')!; m[1].split(',').forEach(i => tasks.delete(i)); return new Response(null, { status: 204 }); }
+      return json([...tasks.values()]);
+    }
+    if (t === 'dashy_appointment') {
+      if (init.method === 'POST') { appt = body; return new Response(null, { status: 201 }); }
+      if (init.method === 'DELETE') { appt = null; return new Response(null, { status: 204 }); }
+      return json(appt ? [appt] : []);
+    }
+    return new Response('{}', { status: 404 });
+  }) as typeof fetch;
+  return { f, tasks, seen };
+}
+test('supabase store: round trip through the REST api, upsert, delete, appointment, errors surface', async () => {
+  const r = fakePostgrest(), s = new SupabaseStore({ url: 'https://p.supabase.co/', serviceKey: 'svc-key', fetch: r.f });
+  const { added } = await addTasks(s, { tasks: [{ title: 'A', category: 'thuis', due: '2026-10-17 09:00', note: 'n' }, { title: 'B', category: 'werk', due: '2026-10-18' }] }, NOW);
+  assert.equal(r.tasks.size, 2); assert.equal(r.tasks.get(added[1].id).has_time, false);
+  const back = await s.tasks(); assert.deepEqual(back.map(t => t.title).sort(), ['A', 'B']);
+  assert.equal(back.find(t => t.title === 'A')!.dueAt, at('2026-10-17 09:00'));
+  await updateTasks(s, { updates: [{ id: added[0].id, done: true }] }, NOW);
+  assert.equal(r.tasks.size, 2, 'an update is an upsert, not a second row'); assert.equal(r.tasks.get(added[0].id).done, true);
+  await updateTasks(s, { updates: [{ id: added[1].id, remove: true }] }, NOW); assert.equal(r.tasks.size, 1);
+  await setAppointment(s, { title: 'X', start: '2026-10-16 12:00' }, NOW); assert.equal((await s.appointment())!.title, 'X');
+  await setAppointment(s, { title: 'Y', start: '2026-10-16 13:00' }, NOW); assert.equal((await s.appointment())!.title, 'Y');
+  await setAppointment(s, { clear: true }, NOW); assert.equal(await s.appointment(), null);
+  assert.ok(r.seen.every(x => x.url.startsWith('https://p.supabase.co/rest/v1/')));
+  await assert.rejects(new SupabaseStore({ url: 'https://p.supabase.co', serviceKey: 'wrong', fetch: r.f }).tasks(), /status 401/);
+  await assert.rejects(s.deleteTasks(['a),id=neq.(b']), /unsafe id/);
+  assert.equal(r.tasks.size, 1, 'an injected filter deletes nothing');
+});
+test('supabase store: a damaged row is skipped', async () => {
+  const f = (async () => new Response(JSON.stringify([{ id: 'ok123456', title: 'T', category: 'thuis', due_at: null, has_time: false, note: null, done: false, done_at: null, position: 1, created_at: 1 }, { id: 5 }, { id: 'bad', category: 'zzz' }]))) as typeof fetch;
+  assert.deepEqual((await new SupabaseStore({ url: 'https://p.test', serviceKey: 'k', fetch: f }).tasks()).map(t => t.id), ['ok123456']);
+});
+test('env: Supabase wins when configured, then Upstash/KV, otherwise nothing (503 elsewhere, never open)', () => {
+  const kind = (e: Record<string, string>) => { const s = storeFromEnv({ ...e }); return s ? s.constructor.name : null; };
+  assert.equal(kind({}), null);
+  assert.equal(kind({ KV_REST_API_URL: 'https://r', KV_REST_API_TOKEN: 't' }), 'UpstashStore');
+  assert.equal(kind({ UPSTASH_REDIS_REST_URL: 'https://r', UPSTASH_REDIS_REST_TOKEN: 't' }), 'UpstashStore');
+  assert.equal(kind({ SUPABASE_URL: 'https://p', SUPABASE_SERVICE_ROLE_KEY: 'k', KV_REST_API_URL: 'https://r', KV_REST_API_TOKEN: 't' }), 'SupabaseStore');
+  assert.equal(kind({ SUPABASE_URL: 'https://p' }), null, 'a url without the key is not configured');
+});

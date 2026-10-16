@@ -105,7 +105,9 @@ Bewust **niet** overgenomen: Supabase, meerdere gebruikers, de eigen OAuth-serve
 **Tools** (5, alles in batches): `dashboard`, `add_tasks`, `update_tasks`, `reorder_tasks`, `appointment`. Titel max 60 tekens zonder tijd of datum erin; tijd in `due` (`YYYY-MM-DD HH:mm`, `YYYY-MM-DD` of `HH:mm`, Nederlandse tijd); toelichting in `note` (max 100).
 
 **Opzetten**
-1. Maak een gratis Upstash Redis-database via Vercel (Storage, Marketplace). Die zet de variabelen zelf (`KV_REST_API_URL` en `KV_REST_API_TOKEN`; de namen `UPSTASH_REDIS_REST_URL` en `UPSTASH_REDIS_REST_TOKEN` werken ook).
+1. **Opslag, kies één.**
+   - **Supabase (gratis plan, aanbevolen):** maak een project op supabase.com (of gebruik je bestaande), voer `db/dashy-tasks.sql` uit in de SQL Editor, en zet in Vercel `SUPABASE_URL` en `SUPABASE_SERVICE_ROLE_KEY` (Project Settings, API; alleen op de server, nooit in een `VITE_*`-variabele). De tabellen hebben RLS aan zonder policies: de publieke sleutel kan er niets mee.
+   - **Upstash Redis:** `KV_REST_API_URL` en `KV_REST_API_TOKEN` (of `UPSTASH_REDIS_REST_URL` en `UPSTASH_REDIS_REST_TOKEN`). Staan beide, dan wint Supabase.
 2. Zet drie verschillende lange sleutels: `DASHY_MCP_TOKEN` (Claude, mag schrijven), `DASHY_STATE_TOKEN` (het scherm, alleen lezen) en `DASHY_ACTION_TOKEN` (het scherm, mag alleen afvinken of ongedaan maken). Zie `.env.example`.
 3. Claude: Instellingen, Connectors, eigen connector toevoegen met `https://<app>/api/mcp` en de header `Authorization: Bearer <DASHY_MCP_TOKEN>`. Kan jouw Claude-app geen header meegeven, gebruik dan `https://<app>/api/mcp/<DASHY_MCP_TOKEN>`.
 4. Scherm koppelen: open eenmalig `https://<app>/#tasks=https://<app>/api/state&key=<DASHY_STATE_TOKEN>&act=<DASHY_ACTION_TOKEN>`. Zonder `act` kan het scherm alleen kijken.
