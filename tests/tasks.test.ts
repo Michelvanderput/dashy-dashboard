@@ -82,12 +82,3 @@ test('pasted link (the Mac window has no address bar): full link or just the has
   const b = mem(); assert.equal(adoptPastedLink(link.slice(link.indexOf('#')), b), true); assert.ok(loadTasksConnection(b));
   for (const bad of ['', 'hallo', 'https://x.test/', 'https://x.test/#tasks=javascript%3Aalert(1)', '#tasks=http%3A%2F%2Fevil.example%2Fs', '#key=abcdefghij12']) { const c = mem(); assert.equal(adoptPastedLink(bad, c), false, bad); assert.equal(loadTasksConnection(c), null); }
 });
-
-import { levelToMeter, roomList, turntableMood } from '../src/turntable';
-test('turntable helpers: a decibel meter, the mood, and a readable list of rooms', () => {
-  assert.equal(levelToMeter(0), 0); assert.equal(levelToMeter(NaN), 0); assert.equal(levelToMeter(-1), 0); assert.equal(levelToMeter(1), 1); assert.equal(levelToMeter(5), 1);
-  assert.ok(Math.abs(levelToMeter(0.001) - 0) < 1e-9 + 0.0001, '-60 dBFS is the bottom'); assert.ok(Math.abs(levelToMeter(0.1) - 2 / 3) < 1e-6, '-20 dBFS is two thirds');
-  assert.ok(levelToMeter(0.05) > levelToMeter(0.01) && levelToMeter(0.01) > levelToMeter(0.002));
-  assert.equal(turntableMood({ listening: false, playing: true }), 'off'); assert.equal(turntableMood({ listening: true, playing: false }), 'quiet'); assert.equal(turntableMood({ listening: true, playing: true }), 'playing');
-  assert.equal(roomList([]), ''); assert.equal(roomList(['A']), 'A'); assert.equal(roomList(['A', 'B']), 'A en B'); assert.equal(roomList(['A', 'B', 'C']), 'A, B en C');
-});

@@ -132,23 +132,11 @@ npm run desktop:build    # app + .dmg in src-tauri/target/release/bundle/
 
 **Koppelen:** de eerste keer vraagt het venster om je koppel-link. Plak daar dezelfde link als voor het scherm (`https://<app>/#tasks=…&key=…&act=…`). Daarna onthoudt hij hem. Met "Koppeling wissen" in de menubalk begin je opnieuw.
 
-### Platenspeler en Sonos
-
-Sluit je platenspeler (met ingebouwde voorversterker) met een aux-kabel aan op je Mac, kies in de menubalk **Platenspeler…** en:
-
-1. **Ingang:** kies waar de kabel op zit en zet "Luister naar de platenspeler" aan. Een niveaumeter laat zien dat er geluid binnenkomt. Zodra er een plaat draait (na ongeveer 1 seconde muziek; hij houdt het zes seconden stil uit, dus een pauze tussen nummers telt niet) draait de plaat in het venster en **danst Dashy**, tenzij er iets urgenters is (een deadline, geblokkeerd): feiten gaan voor gevoel.
-2. **Sonos:** "Zoek speakers", vink de ruimtes aan en kies een volume. "Speel af in …" maakt van de Mac een kleine radiozender (MP3 over je thuisnetwerk) en zet die op je Sonos, in alle gekozen ruimtes tegelijk als één groep. Vindt hij niets, vul dan het adres van een speaker in. Sonos loopt 5 tot 10 seconden achter op de plaat; dat is hoe Sonos streams buffert.
-3. **De platenspeler heeft voorrang** (aan te vinken): draait er een plaat, dan pauzeert Dashy wat de speakers speelden (bijvoorbeeld Spotify, via Sonos of Spotify Connect), en meldt dat. Daarna speelt hij de plaat af. Stopt de plaat, dan geeft hij de speakers weer vrij. Het werkt ook met het venster dicht.
-
-**Wat "voorrang" wel en niet doet:** het pauzeert wat de **Sonos-speakers** spelen en neemt ze over. Spotify op je telefoon of laptop (niet via de boxen) of in het Spotify-blok van de web-app wordt niet aangeraakt, want dat is een andere afspeler. Ik kan dat later toevoegen, maar dan moet de Mac-app ook zelf bij Spotify inloggen.
-
-**Toestemmingen op je Mac:** macOS vraagt (1) toegang tot de **microfoon**, die geldt ook voor een aux-ingang, (2) **lokaal netwerk** om je speakers te vinden, en (3) bij de eerste stream of Dashy **binnenkomende verbindingen** mag toestaan: kies Sta toe, anders kan Sonos de stream niet ophalen. Heeft je MacBook geen echte lijningang, dan werkt een goedkope USB-audioadapter met lijningang het betrouwbaarst.
-
 **Goed om te weten**
 - De app is niet ondertekend: bij de eerste start klik je met rechts op het icoon en kies je **Open** (anders blokkeert macOS hem). Wil je hem delen, dan is ondertekenen met een Apple-account nodig.
 - Een transparant venster op macOS vraagt Tauri's `macos-private-api`. Prima voor je eigen Mac, niet voor de Mac App Store.
 - Het uitlezen van de muis over het hele scherm vraagt geen extra toestemming van macOS.
-- Getest: de Rust-code (19 tests, inclusief een echte MP3-stream en een nagebootste Sonos die de hele groep- en pauzevolgorde controleert) en de webpagina's in een browser. **Niet** getest: het venster zelf, echt geluid van een platenspeler en echte Sonos-speakers; dat kan hier niet. Loop je ergens tegenaan, meld het dan.
+- Getest: de Rust-code (compileert zonder fouten) en de webpagina in een browser. **Niet** getest: het venster zelf op een echte Mac. Loop je ergens tegenaan, meld het dan.
 
 ## Afspraak en dagbalk op het scherm
 

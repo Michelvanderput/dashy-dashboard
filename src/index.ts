@@ -22,7 +22,5 @@ export { TASK_DRIVER_CONFIG, nowTask, parseDashboard, parseMinutes, parseWhen, s
 export type { DashTask, DashboardSnapshot } from './tasks';
 export { adoptPastedLink, adoptTasksHash, forgetTasksConnection, loadTasksConnection } from './tasks-connection';
 export type { TasksConnection } from './tasks-connection';
-export { TURNTABLE_LABEL, levelToMeter, roomList, turntableMood } from './turntable';
-export type { TurntableMood } from './turntable';
 export { SOON_MS, appointmentView, dayProgress, duration, positionOnDay } from './day';
 export type { AppointmentView, DayPhase, DayProgress, Workday } from './day';
