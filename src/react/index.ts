@@ -9,3 +9,5 @@ export type { NowPlayingBlockProps } from './NowPlayingBlock';
 export type { SpotifyStatus } from '../spotify/session';
 export { useSpotify } from './useSpotify';
 export type { UseSpotifyOptions } from './useSpotify';
+export { useDashyTasks } from './useDashyTasks';
+export type { DashyTasks, UseDashyTasksOptions } from './useDashyTasks';

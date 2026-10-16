@@ -70,6 +70,22 @@ React: `<Dashy definition={def} sequence="hello" colors={{ body: '#fff' }} />`.
 
 De `look` van een uitdrukking heeft dezelfde namen als de tabel in `core.ts`: `sd` (afstand tussen de ogen), `eh` (oog-hoogte), `cover` (bovenooglid), `lidA` (schuinte), `low` (blij-boog), `tilt`, `asym`. Een uitdrukking mag ook alleen een `state` hebben (een eigen naam voor een ingebouwde stand). Ongeldige definities worden geweigerd met een JSON-pointer naar het eerste probleem (`parseDefinition` / `validateDefinition`, max 256 KiB, geen dependencies).
 
+## Laag 1: Dashy volgt je echte taken
+
+`src/tasks.ts` vertaalt het dashboard (`{ today, tasks: [[id, titel, categorie, wanneer, notitie]], left_open, time_today }`) naar driver-gebeurtenissen:
+
+| Gebeurt er | Dashy |
+|---|---|
+| nieuwe taak | `received` |
+| taak verdwijnt (afgevinkt) | `done` |
+| taak met tijdstip binnen 30 min | `strict` |
+| dingen "nog open van eerder" | `waiting` (rustig, geen verwijt) |
+| 2 uur niets gebeurd | `sad` |
+
+Hij wordt bewust **nooit boos** op taken (`TASK_DRIVER_CONFIG`), en een tijdstip dat voorbij is telt niet meer als deadline.
+
+Koppelen: zet het dashboard als JSON achter een https-adres (localhost mag ook over http) en open de app eenmalig met `https://<app>/#tasks=<url>&key=<sleutel>`. Dat wordt op dit apparaat onthouden en uit de adresbalk gehaald; de sleutel (optioneel) gaat mee als `Authorization: Bearer`. In React: `useDashyTasks({ url, token })`. Een mislukte poll houdt het laatste beeld vast en toont een rustige foutmelding.
+
 ## Aansturen vanuit je app
 
 Jouw app vertaalt gebeurtenissen naar een toestand. Voorbeeld:
