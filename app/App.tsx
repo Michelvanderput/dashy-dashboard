@@ -9,6 +9,7 @@ import { laterMs, type Later } from '../src/dashboard/time';
 import { addEntry, parseLog, type UrgeOutcome } from '../src/dashboard/urge';
 import { initialModel, reducer, type Action, type PlanItem } from '../src/dashboard/plan';
 import { resolve, type Resolution, type RuleName } from '../src/driver';
+import { ConnectPanel } from './ConnectPanel';
 import { DemoPanel } from './DemoPanel';
 import { demoTrack, seedItems } from './demo';
 
@@ -29,7 +30,17 @@ function connect() {
 const RULES: RuleName[] = ['done', 'received', 'blocked', 'deadlineSoon', 'deadlineNear', 'waiting', 'break', 'working', 'quiet', 'idle'];
 const fromRemote = (state: Resolution['state'], rule?: string): Resolution => ({ state, rule: (RULES as string[]).includes(rule ?? '') ? (rule as RuleName) : 'idle' });
 
+/** True inside the desktop shell (Tauri), where the app has no site of its own and Spotify's redirect cannot work. */
+const inShell = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 export function App() {
+  const [connected, setConnected] = useState(0); // bumps after the connect form, to read the stored connection again
+  const connection0 = useMemo(connect, [connected]);
+  if (inShell && !connection0) return <ConnectPanel onDone={() => setConnected(n => n + 1)} />;
+  return <Main />;
+}
+
+function Main() {
   const now = useNow(1000);
   const nowRef = useRef(now); nowRef.current = now;
   const [model, send] = useReducer((m: ReturnType<typeof initialModel>, a: Action & { at: number }) => reducer(m, a, a.at), undefined, () => initialModel(seedItems(Date.now()), Date.now()));
@@ -38,7 +49,7 @@ export function App() {
   const [demoMusic, setDemoMusic] = useState(false);
 
   // Real sources, when configured in .env.local; otherwise the demo.
-  const spotifyId = env.VITE_SPOTIFY_CLIENT_ID;
+  const spotifyId = inShell ? undefined : env.VITE_SPOTIFY_CLIENT_ID;
   const sp = useSpotify({ clientId: spotifyId ?? 'not-configured', redirectUri: env.VITE_SPOTIFY_REDIRECT_URI ?? `${location.origin}/` });
   const connection = useMemo(connect, []);
   const remoteOn = !!connection;

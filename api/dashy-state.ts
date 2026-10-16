@@ -1,5 +1,6 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { originsFrom } from '../src/server/cors';
 import { parseDoc, type Store } from '../src/server/dashyStore';
 import { handleStateRequest } from '../src/server/stateHttp';
 
@@ -15,7 +16,8 @@ const limiter = redis ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(
 export async function GET(request: Request): Promise<Response> {
   return handleStateRequest(request, {
     store, now: Date.now, stateToken: process.env.DASHY_STATE_TOKEN,
+    allowedOrigins: originsFrom(process.env.DASHY_ALLOWED_ORIGINS),
     allow: async key => (limiter ? (await limiter.limit(key)).success : false),
   });
 }
-export const POST = GET, PUT = GET, DELETE = GET, PATCH = GET;
+export const OPTIONS = GET, POST = GET, PUT = GET, DELETE = GET, PATCH = GET;

@@ -1,3 +1,4 @@
+import { preflight, withCors } from './cors';
 import { authorized, fingerprint, tokenFrom } from './auth';
 import type { Habit } from '../dashboard/habits';
 import type { PlanItem } from '../dashboard/plan';
@@ -10,6 +11,8 @@ export interface StateHttpDeps {
   stateToken: string | undefined;
   allow: (key: string) => Promise<boolean>;
   log?: (msg: string) => void;
+  /** Origins of desktop shells that may call this endpoint (see cors.ts). Default: none. */
+  allowedOrigins?: readonly string[];
 }
 
 export interface StateBody { state: string; line: string; source: 'driver' | 'claude' | 'fallback'; rule: string; nextWakeAt: number | null; rev: number; at: number; items: PlanItem[]; focusId: string | null; habits: Habit[]; flags: { break: boolean; blocked: boolean; waiting: boolean }; focusedMinutes: number }
@@ -24,6 +27,12 @@ export const reply = (status: number, b: StateBody, reason?: string) =>
 
 /** What the app polls: the state Dashy should show right now. Every answer, also an error, is a valid state body. */
 export async function handleStateRequest(req: Request, deps: StateHttpDeps): Promise<Response> {
+  const allowed = deps.allowedOrigins ?? [];
+  if (req.method === 'OPTIONS') return preflight(req, allowed, 'GET');
+  return withCors(req, allowed, await inner(req, deps));
+}
+
+async function inner(req: Request, deps: StateHttpDeps): Promise<Response> {
   const log = deps.log ?? console.error;
   const now = deps.now();
   if (req.method !== 'GET') return reply(405, calm(now), 'method');

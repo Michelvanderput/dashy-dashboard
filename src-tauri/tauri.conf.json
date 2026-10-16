@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Dashy",
+  "version": "0.1.0",
+  "identifier": "nl.dashy.app",
+  "build": {
+    "frontendDist": "../dist-app",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run app:build"
+  },
+  "app": {
+    "windows": [
+      { "label": "main", "title": "Dashy", "width": 1100, "height": 760, "minWidth": 360, "minHeight": 320, "resizable": true, "center": true }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https: ipc: http://ipc.localhost http://127.0.0.1:*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Je dag in één oogopslag, met Dashy als regisseur.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+  }
+}

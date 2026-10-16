@@ -45,6 +45,6 @@ Eerlijke stand:
 |---|---|
 | Web | Klaar: Vite-app, PWA-manifest, iOS-meta, Wake Lock. Op iPhone: Deel > Zet op beginscherm. |
 | iOS / macOS | Dashy zelf is geport (Swift-package `DashyCore`/`DashyUI`, golden replay). Het hele dashboard en de nieuwe functies zijn **niet** naar SwiftUI geport en niet gecompileerd (geen Xcode hier). |
-| Windows / Mac desktop | Aanbevolen: dezelfde webapp in een Tauri 2-schil (kleine installer, OS-webview, ook mobiel). Hier **niet** gebouwd of getest. Alternatief: Electron (groter, rijper ecosysteem). Bronnen: [Tauri vs Electron](https://tech-insider.org/tauri-vs-electron-2026/). |
+| Windows / Mac desktop | Tauri 2-schil (kleine installer, OS-webview): scaffold staat in `src-tauri/`, zie `docs/PLATFORMS.md`. Alternatief was Electron (groter, rijper ecosysteem). Bron: [Tauri vs Electron](https://tech-insider.org/tauri-vs-electron-2026/). Windows/macOS-builds zijn niet getest. |
 
 Lopend werk voor native: de gedeelde logica (`src/dashboard/*`, `src/driver.ts`) is puur en framework-vrij, dus te porten met dezelfde testvectoren.

@@ -19,7 +19,10 @@
     "swift:reference": "tsx scripts/swift-reference.ts",
     "swift:test": "cd swift/DashyKit && swift test",
     "dev": "vite",
-    "app:build": "vite build"
+    "app:build": "vite build",
+    "desktop:dev": "npx --yes @tauri-apps/cli@2 dev",
+    "desktop:build": "npx --yes @tauri-apps/cli@2 build",
+    "desktop:icons": "npx --yes @tauri-apps/cli@2 icon app/public/icons/icon-512.png -o src-tauri/icons"
   },
   "license": "UNLICENSED",
   "dependencies": {

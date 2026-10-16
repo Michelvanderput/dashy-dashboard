@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The window can do nothing special: no file, shell or OS access. Everything happens in the web app.",
+  "windows": ["main"],
+  "permissions": []
+}

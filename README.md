@@ -124,6 +124,10 @@ Zie `docs/RESEARCH.md` voor onderzoek, bronnen en wat het bewijs wel en niet zeg
 - **Sneltoetsen (desktop):** `n` nieuwe taak, `b` begin, `k` klaar, `l` later, `p` pauze, `s` even stoppen, `Esc` sluiten. Ze werken niet tijdens het typen of met Ctrl/Cmd.
 - Het actie-eindpunt kan alleen: taak afvinken/terugzetten, taak toevoegen (titel), taak kiezen, gewoonte van vandaag afvinken. Niets anders.
 
+## Desktop (Windows en Mac) en andere platformen
+
+Zie `docs/PLATFORMS.md` voor de eerlijke stand per platform. Kort: dezelfde webapp in een Tauri 2-schil (`src-tauri/`, `npm run desktop:build`), met een eerste-start-formulier om te koppelen en CORS voor de schil in de API. De Linux-variant compileert hier (`cargo check`); Windows en macOS zijn alleen via de GitHub-workflow te bouwen en zijn **niet getest**.
+
 ## Spotify-blok
 
 `<NowPlayingBlock />`: de albumhoes met een vinylplaat die eruit schuift en draait (33⅓ toeren) zolang er muziek speelt. Dashy danst ernaast. Pauzeert de muziek, dan stopt de plaat en wordt Dashy weer rustig.

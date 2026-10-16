@@ -8,6 +8,8 @@ export interface StateHttpDeps {
     stateToken: string | undefined;
     allow: (key: string) => Promise<boolean>;
     log?: (msg: string) => void;
+    /** Origins of desktop shells that may call this endpoint (see cors.ts). Default: none. */
+    allowedOrigins?: readonly string[];
 }
 export interface StateBody {
     state: string;

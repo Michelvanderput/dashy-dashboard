@@ -6,6 +6,8 @@ export interface ActionHttpDeps {
     actionToken: string | undefined;
     allow: (key: string) => Promise<boolean>;
     log?: (msg: string) => void;
+    /** Origins of desktop shells that may call this endpoint (see cors.ts). Default: none. */
+    allowedOrigins?: readonly string[];
 }
 /** POST {action: 'done' | 'undo' | 'add' | 'focus' | 'check' | 'uncheck', id?, title?}. Answers with the fresh state body; every error answers with the calm shape. */
 export declare function handleActionRequest(req: Request, deps: ActionHttpDeps): Promise<Response>;

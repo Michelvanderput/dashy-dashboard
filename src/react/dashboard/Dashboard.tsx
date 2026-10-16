@@ -98,7 +98,7 @@ function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why, on
       <h2 className="db-sr" id="db-title-dashy">{TITLES.dashy}</h2>
       <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES.dashy}` : `Vergroot ${TITLES.dashy}`} onClick={() => onToggle('dashy')}><Chevrons /></button>
       <div className="db-body"><div className="db-say"><p className="db-line">{say}</p><p className="db-why">{why}</p></div></div>
-      {onHelp && <button type="button" className="db-help" onClick={onHelp}>Even stoppen</button>}
+      {onHelp && <button type="button" className="db-help" onClick={onHelp} title="Even stoppen (S)">Even stoppen</button>}
     </section>
   );
 }
@@ -229,9 +229,9 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
                   </div>
                 ) : pick.item.kind === 'task' && (
                   <div className="db-actions">
-                    {onStartSession && <button type="button" className="db-done" onClick={() => onStartSession({ id: pick.item.id, title: pick.item.title })} aria-label={`Begin ${SESSION_MINUTES} minuten aan ${pick.item.title}`}>Begin ({SESSION_MINUTES} min)</button>}
-                    {onToggleDone && <button type="button" className={onStartSession ? 'db-done ghost' : 'db-done'} onClick={() => onToggleDone(pick.item.id, true)} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
-                    {onSnooze && <button type="button" className="db-done ghost" aria-expanded={false} onClick={() => setLaterOpen(true)} aria-label={`${pick.item.title}: later`}>Later</button>}
+                    {onStartSession && <button type="button" className="db-done" onClick={() => onStartSession({ id: pick.item.id, title: pick.item.title })} title="Begin (B)" aria-label={`Begin ${SESSION_MINUTES} minuten aan ${pick.item.title}`}>Begin ({SESSION_MINUTES} min)</button>}
+                    {onToggleDone && <button type="button" className={onStartSession ? 'db-done ghost' : 'db-done'} title="Klaar (K)" onClick={() => onToggleDone(pick.item.id, true)} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
+                    {onSnooze && <button type="button" className="db-done ghost" aria-expanded={false} title="Later (L)" onClick={() => setLaterOpen(true)} aria-label={`${pick.item.title}: later`}>Later</button>}
                   </div>
                 )}
                 {after && <p className="db-after">Straks: {clock(after.at)} · {after.item.title}</p>}
@@ -283,7 +283,7 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
               {focusedMinutes > 0 && <p className="db-focused">Gefocust: {focusedMinutes} min</p>}
               {onFlag && flags && (
                 <div className="db-flags" role="group" aria-label="Hoe gaat het?">
-                  <button type="button" aria-pressed={flags.break} onClick={() => onFlag('break', !flags.break)}>Pauze</button>
+                  <button type="button" aria-pressed={flags.break} title="Pauze (P)" onClick={() => onFlag('break', !flags.break)}>Pauze</button>
                   <button type="button" aria-pressed={flags.blocked} onClick={() => onFlag('blocked', !flags.blocked)}>Ik zit vast</button>
                 </div>
               )}

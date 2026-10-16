@@ -101,6 +101,9 @@ export const CSS = `
 @container (max-height:140px){.db-music .dnp-time,.db-music .dnp-bar,.db-music .dnp-logo{display:none}}
 @container (max-height:110px){.db-music .dnp-actions .dnp-btn{display:none}}
 
+/* Mouse and trackpad (desktop): the grow button shows on hover; touch screens use a tap on the block */
+@media (hover:hover) and (pointer:fine){.db-block:hover .db-toggle{opacity:.55}.db-block:hover .db-toggle:hover{opacity:1}.db-block:not(.db-bodyblock){cursor:pointer}.db-add input,.db-block button{cursor:pointer}.db-add input{cursor:text}}
+
 /* Focus session, habits, quick add */
 .db-actions{display:flex;flex-wrap:wrap;gap:.5em;margin-top:.9em}
 .db-actions .db-done{margin-top:0}

@@ -6,3 +6,5 @@ swift/DashyKit/.swiftpm
 .vercel
 dist-app
 dist-real
+src-tauri/target
+src-tauri/gen

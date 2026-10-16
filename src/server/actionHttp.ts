@@ -1,3 +1,4 @@
+import { preflight, withCors } from './cors';
 import { authorized, fingerprint, tokenFrom } from './auth';
 import { update, type Call, type Store } from './dashyStore';
 import { buildStateBody, reply } from './stateHttp';
@@ -9,6 +10,8 @@ export interface ActionHttpDeps {
   actionToken: string | undefined;
   allow: (key: string) => Promise<boolean>;
   log?: (msg: string) => void;
+  /** Origins of desktop shells that may call this endpoint (see cors.ts). Default: none. */
+  allowedOrigins?: readonly string[];
 }
 
 const MAX_BODY = 1000;
@@ -36,6 +39,12 @@ function toCall(b: { action?: unknown; id?: unknown; title?: unknown; until?: un
 
 /** POST {action: 'done' | 'undo' | 'add' | 'focus' | 'check' | 'uncheck', id?, title?}. Answers with the fresh state body; every error answers with the calm shape. */
 export async function handleActionRequest(req: Request, deps: ActionHttpDeps): Promise<Response> {
+  const allowed = deps.allowedOrigins ?? [];
+  if (req.method === 'OPTIONS') return preflight(req, allowed, 'POST');
+  return withCors(req, allowed, await inner(req, deps));
+}
+
+async function inner(req: Request, deps: ActionHttpDeps): Promise<Response> {
   const log = deps.log ?? console.error;
   const now = deps.now();
   if (req.method !== 'POST') return reply(405, calm(now), 'method');
