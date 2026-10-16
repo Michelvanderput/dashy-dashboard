@@ -1,6 +1,6 @@
 import type { DashyState } from './core';
 
-export interface RemoteState { state: DashyState; line: string; source: 'driver' | 'claude' | 'fallback'; nextWakeAt: number | null; rev: number }
+export interface RemoteState { state: DashyState; line: string; source: 'driver' | 'claude' | 'fallback'; nextWakeAt: number | null; rev: number; /** which driver rule decided, when the server says */ rule?: string }
 export interface StateClientOptions { url: string; token: string; timeoutMs?: number; fetch?: typeof fetch }
 
 const STATES: readonly string[] = ['idle', 'received', 'working', 'thinking', 'waiting', 'blocked', 'done', 'happy', 'sad', 'angry', 'strict', 'dancing', 'sleepy'];
@@ -16,7 +16,7 @@ export function parseRemoteState(raw: unknown): RemoteState {
   if (o.source !== 'driver' && o.source !== 'claude' && o.source !== 'fallback') throw new Error('bad source');
   const wake = o.nextWakeAt;
   if (wake !== null && (typeof wake !== 'number' || !Number.isFinite(wake))) throw new Error('bad wake');
-  return { state: o.state as DashyState, line: o.line, source: o.source, nextWakeAt: wake as number | null, rev: typeof o.rev === 'number' ? o.rev : 0 };
+  return { state: o.state as DashyState, line: o.line, source: o.source, nextWakeAt: wake as number | null, rev: typeof o.rev === 'number' ? o.rev : 0, ...(typeof o.rule === 'string' && o.rule.length < 30 ? { rule: o.rule } : {}) };
 }
 
 /** Never throws, never hangs: any error, timeout, bad status or invalid body gives the calm fallback (idle, no text). */

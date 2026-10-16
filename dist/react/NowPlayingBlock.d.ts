@@ -14,8 +14,12 @@ export interface NowPlayingBlockProps {
     onDisconnect?: () => void;
     /** What the state driver says right now. Dashy dances to the music only when this is calm (idle, quiet, working). Default: idle. */
     driver?: Resolution;
-    /** Size of the album cover in px. Default 160. */
-    size?: number;
+    /** Size of the album cover: px (number) or any CSS length. Default 160. */
+    size?: number | string;
+    /** No card of its own (background, padding, corners): for use inside another container. */
+    bare?: boolean;
+    /** Show Dashy dancing next to the record. Default true. Turn off when Dashy lives in a block of his own. */
+    showDashy?: boolean;
     /** Message to show with status "error". */
     error?: string;
     className?: string;
@@ -26,4 +30,4 @@ export interface NowPlayingBlockProps {
  * dances next to it (his motion comes from core.ts, not from this component). Spotify's rules for the cover are followed:
  * shown whole and unaltered (not cropped, covered or animated), 4 px corners (8 px from 300 px up), and a link back to Spotify. The record colour is picked per album from a fixed palette; the cover is never used on the label.
  */
-export declare function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, driver, size, error, className, style }: NowPlayingBlockProps): import("react").JSX.Element;
+export declare function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, driver, size, bare, showDashy, error, className, style }: NowPlayingBlockProps): import("react").JSX.Element;

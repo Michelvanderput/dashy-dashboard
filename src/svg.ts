@@ -1,4 +1,4 @@
-import { layout } from './render';
+import { bodyMotion, layout, type BodyMotionOptions } from './render';
 import { smallGeometry, SMALL_MAX_PX, type Variant } from './small';
 import { createDashy, type Dashy, type DashyOptions, type DashyState, type Geometry, type Shape } from './core';
 
@@ -11,6 +11,12 @@ export interface MountOptions extends DashyOptions {
   reducedMotion?: boolean;
   /** 'small' = simpler drawing for 24 to 32 px. 'auto' (default) picks it from the rendered size. */
   variant?: Variant;
+  /**
+   * Body mode: `container` itself is Dashy's body (a card). Only the eyes are drawn (an overlay filling the card); the body
+   * movement from core.ts (hop, squash, tilt, shake) is applied to the card's transform, and its corner radius follows the body.
+   * `vars` receives --dbx and --dby (px): how far the body moved, so text on it can ride along.
+   */
+  body?: { vars?: HTMLElement } & BodyMotionOptions;
 }
 export interface DashyHandle {
   dashy: Dashy;
@@ -18,6 +24,8 @@ export interface DashyHandle {
   getState(): DashyState;
   setShape(s: Shape): void;
   poke(): void;
+  /** Look towards (nx, ny) in -1..1 relative to the centre, like a pointer would. */
+  look(nx: number, ny: number): void;
   destroy(): void;
 }
 
@@ -37,24 +45,31 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
   const labels = { ...DEFAULT_LABELS, ...opts.labels };
   const reduced = () => opts.reducedMotion ?? (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-  container.insertAdjacentHTML('beforeend', `
+  const bodyMode = !!opts.body;
+  const maskDefs = (['L', 'R'] as const).map(s => `<mask id="${id}m${s}" maskUnits="userSpaceOnUse" x="-120" y="-120" width="240" height="240"><rect fill="#fff"/><rect fill="#000"/><ellipse fill="#000"/></mask>`).join('');
+  const eyeRects = (['L', 'R'] as const).map(s => `<g class="eye${s}"><rect x="-80" y="-100" width="160" height="200" fill="#101214" mask="url(#${id}m${s})"/></g>`).join('');
+  container.insertAdjacentHTML('beforeend', bodyMode ? `
+<svg viewBox="0 0 300 300" role="img" style="position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible;pointer-events:none;shape-rendering:geometricPrecision">
+  <title></title>
+  <defs>${maskDefs}</defs>
+  <g class="face">${eyeRects}</g>
+</svg>` : `
 <svg viewBox="0 0 300 300" role="img" style="display:block;width:100%;height:100%;overflow:visible;shape-rendering:geometricPrecision;touch-action:manipulation">
   <title></title>
   <defs>
     <clipPath id="${id}c"><rect x="40" y="40" width="220" height="220" rx="22"/></clipPath>
-    ${(['L', 'R'] as const).map(s => `<mask id="${id}m${s}" maskUnits="userSpaceOnUse" x="-120" y="-120" width="240" height="240"><rect fill="#fff"/><rect fill="#000"/><ellipse fill="#000"/></mask>`).join('')}
+    ${maskDefs}
   </defs>
   <g class="body">
     <rect class="outline" x="40.5" y="40.5" width="219" height="219" rx="22" fill="#fff" stroke="#c9c9c4" stroke-width="1"/>
-    <g clip-path="url(#${id}c)"><g class="face">
-      ${(['L', 'R'] as const).map(s => `<g class="eye${s}"><rect x="-80" y="-100" width="160" height="200" fill="#101214" mask="url(#${id}m${s})"/></g>`).join('')}
-    </g></g>
+    <g clip-path="url(#${id}c)"><g class="face">${eyeRects}</g></g>
   </g>
 </svg>`);
   const svg = container.querySelector<SVGSVGElement>('svg:last-of-type')!;
   const q = <T extends Element>(sel: string) => svg.querySelector<T>(sel)!;
-  const body = q<SVGGElement>('.body'), face = q<SVGGElement>('.face'), outline = q<SVGRectElement>('.outline');
-  const clip = svg.querySelector<SVGRectElement>(`#${id}c rect`)!;
+  const face = q<SVGGElement>('.face');
+  const body = bodyMode ? null : q<SVGGElement>('.body'), outline = bodyMode ? null : q<SVGRectElement>('.outline');
+  const clip = bodyMode ? null : svg.querySelector<SVGRectElement>(`#${id}c rect`)!;
   const title = q<SVGTitleElement>('title');
   const eyes = (['L', 'R'] as const).map(s => {
     const m = svg.querySelector(`#${id}m${s}`)!;
@@ -64,17 +79,45 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
 
   let small = opts.variant === 'small';
   const set = (el: Element, attrs: Record<string, string>) => { for (const k in attrs) el.setAttribute(k, attrs[k]); };
+  // body mode: size of the card in px, and px per core unit (the body is 220 units wide in core.ts)
+  let W = 0, H = 0, u = 1;
+  let room = 0;
+  function measure() {
+    W = container.offsetWidth; H = container.offsetHeight;
+    if (!W || !H) { W = H = 220; u = 1; } else u = Math.min(W, H) / 220;
+    // free room: the smallest of the gaps and paddings of the grid the card sits in (to the neighbours and to the screen edge)
+    const parent = opts.body?.vars?.parentElement;
+    if (opts.body?.room !== undefined) room = opts.body.room;
+    else if (parent && typeof getComputedStyle === 'function') {
+      const cs = getComputedStyle(parent), px = (v: string) => (Number.isFinite(parseFloat(v)) ? parseFloat(v) : Infinity);
+      const m = Math.min(px(cs.columnGap), px(cs.rowGap), px(cs.paddingLeft), px(cs.paddingRight), px(cs.paddingTop), px(cs.paddingBottom));
+      room = Number.isFinite(m) ? 0.85 * m : 0;
+    } else room = 0;
+    svg.setAttribute('viewBox', `${f(150 - W / (2 * u))} ${f(150 - H / (2 * u))} ${f(W / u)} ${f(H / u)}`);
+  }
+  function applyBody(G: Geometry) {
+    const m = bodyMotion(G, W, H, { gain: opts.body?.gain, room });
+    container.style.transformOrigin = '50% 100%';
+    container.style.transform = `translate(${f(m.dx)}px, ${f(m.dy)}px) rotate(${f(m.rot)}deg) scale(${f(m.sx)}, ${f(m.sy)})`;
+    container.style.borderRadius = `${f(m.radius)}px`;
+    const v = opts.body?.vars;
+    if (v) { v.style.setProperty('--dbx', `${f(m.dx)}px`); v.style.setProperty('--dby', `${f(m.dy)}px`); }
+  }
   function draw(G0: Geometry) {
-    const L = layout(small ? smallGeometry(G0) : G0, small);
-    outline.setAttribute('stroke-width', L.outlineWidth); outline.setAttribute('rx', L.outlineRx); clip.setAttribute('rx', L.clipRx);
-    body.setAttribute('transform', L.body); face.setAttribute('transform', L.face);
+    const L = layout(small && !bodyMode ? smallGeometry(G0) : G0, small && !bodyMode);
+    if (bodyMode) applyBody(G0);
+    else {
+      outline!.setAttribute('stroke-width', L.outlineWidth); outline!.setAttribute('rx', L.outlineRx); clip!.setAttribute('rx', L.clipRx);
+      body!.setAttribute('transform', L.body);
+    }
+    face.setAttribute('transform', L.face);
     L.eyes.forEach((e, i) => {
       const E = eyes[i];
       E.g.setAttribute('transform', e.group); set(E.pill, e.pill); set(E.lid, e.lid); set(E.low, e.low);
     });
   }
 
-  const pickVariant = () => { if (opts.variant === 'auto' || opts.variant === undefined) small = svg.getBoundingClientRect().width > 0 && svg.getBoundingClientRect().width <= SMALL_MAX_PX; };
+  const pickVariant = () => { if (bodyMode) return; if (opts.variant === 'auto' || opts.variant === undefined) small = svg.getBoundingClientRect().width > 0 && svg.getBoundingClientRect().width <= SMALL_MAX_PX; };
   let raf = 0, destroyed = false, offscreen = false;
   const now = () => performance.now();
   const setTitle = () => { title.textContent = labels[dashy.getState()]; };
@@ -107,12 +150,15 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     dashy.pointer((e.clientX - (r.left + r.width / 2)) / (r.width / 2), (e.clientY - (r.top + r.height / 2)) / (r.height / 2), now());
   };
   const onDown = () => { if (!reduced()) { dashy.poke(now()); setTitle(); } };
+  // body mode: a tap on the body (not on a button or link on top of it) is a poke
+  const pokeTarget: HTMLElement | SVGSVGElement = bodyMode ? (opts.body!.vars ?? container) : svg;
+  const onTap = (e: Event) => { if (bodyMode && (e.target as Element).closest?.('button, a, input, [role="checkbox"]')) return; onDown(); };
   window.addEventListener('pointermove', onMove, { passive: true });
-  svg.addEventListener('pointerdown', onDown);
+  pokeTarget.addEventListener('pointerdown', onTap);
   const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   mq?.addEventListener('change', applyMotionPreference);
-  const ro = typeof ResizeObserver === 'function' && (opts.variant ?? 'auto') === 'auto' ? new ResizeObserver(() => { pickVariant(); if (reduced()) settleAndDraw(); }) : null;
-  ro?.observe(svg); pickVariant();
+  const ro = typeof ResizeObserver === 'function' && (bodyMode || (opts.variant ?? 'auto') === 'auto') ? new ResizeObserver(() => { if (bodyMode) measure(); else pickVariant(); if (reduced()) settleAndDraw(); }) : null;
+  ro?.observe(bodyMode ? container : svg); pickVariant(); if (bodyMode) measure();
   const onVisibility = () => applyMotionPreference();
   document.addEventListener('visibilitychange', onVisibility);
   const io = typeof IntersectionObserver === 'function'
@@ -127,10 +173,13 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     getState: () => dashy.getState(),
     setShape(s) { dashy.setShape(s); if (reduced()) settleAndDraw(); },
     poke: onDown,
+    look(nx, ny) { if (!reduced()) dashy.pointer(nx, ny, now()); },
     destroy() {
       destroyed = true; cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', onVisibility); io?.disconnect(); ro?.disconnect();
       window.removeEventListener('pointermove', onMove); mq?.removeEventListener('change', applyMotionPreference);
+      pokeTarget.removeEventListener('pointerdown', onTap);
+      if (bodyMode) { container.style.transform = ''; container.style.transformOrigin = ''; container.style.borderRadius = ''; opts.body!.vars?.style.removeProperty('--dbx'); opts.body!.vars?.style.removeProperty('--dby'); }
       svg.remove();
     },
   };

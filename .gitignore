@@ -4,3 +4,4 @@ swift/DashyKit/.swiftpm
 .env
 .env.local
 .vercel
+dist-app

@@ -19,8 +19,12 @@ export interface NowPlayingBlockProps {
   onDisconnect?: () => void;
   /** What the state driver says right now. Dashy dances to the music only when this is calm (idle, quiet, working). Default: idle. */
   driver?: Resolution;
-  /** Size of the album cover in px. Default 160. */
-  size?: number;
+  /** Size of the album cover: px (number) or any CSS length. Default 160. */
+  size?: number | string;
+  /** No card of its own (background, padding, corners): for use inside another container. */
+  bare?: boolean;
+  /** Show Dashy dancing next to the record. Default true. Turn off when Dashy lives in a block of his own. */
+  showDashy?: boolean;
   /** Message to show with status "error". */
   error?: string;
   className?: string;
@@ -34,6 +38,7 @@ const CSS = `
 .dnp{--s:160px;--vinyl:#c8102e;position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:20px 28px;padding:20px 24px;border-radius:20px;
  background:color-mix(in srgb,var(--vinyl) 9%,#f6f5f1);color:#16181a;font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
 @media (prefers-color-scheme:dark){.dnp{background:color-mix(in srgb,var(--vinyl) 16%,#17181a);color:#f1f0ec}}
+.dnp-bare{padding:0;border-radius:0;background:none;overflow:visible;gap:12px 24px}
 .dnp-stage{position:relative;flex:none;width:calc(var(--s)*1.72);height:var(--s)}
 .dnp-sleeve{position:absolute;left:0;top:0;width:var(--s);height:var(--s);z-index:2;background:#fff;border-radius:var(--rc,4px);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.3),0 10px 24px -8px rgba(0,0,0,.45)}
 .dnp-sleeve img{display:block;width:100%;height:100%;object-fit:contain}
@@ -90,7 +95,7 @@ let uid = 0;
  * dances next to it (his motion comes from core.ts, not from this component). Spotify's rules for the cover are followed:
  * shown whole and unaltered (not cropped, covered or animated), 4 px corners (8 px from 300 px up), and a link back to Spotify. The record colour is picked per album from a fixed palette; the cover is never used on the label.
  */
-export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, driver = CALM, size = 160, error, className, style }: NowPlayingBlockProps) {
+export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConnect, onDisconnect, driver = CALM, size = 160, bare = false, showDashy = true, error, className, style }: NowPlayingBlockProps) {
   const [id] = useState(() => `dnp-label-${++uid}`);
   const [now, setNow] = useState(() => Date.now());
   const [coverFailed, setCoverFailed] = useState(false);
@@ -105,13 +110,14 @@ export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConn
   }, [playing, np?.id]);
 
   const dashy: DashyState = musicState(driver, playing);
+  const px = typeof size === 'number' ? size : 0;
   const color = vinylColor(np ? `${np.album}|${np.artists[0] ?? ''}` : 'idle');
   const artists = np?.artists.join(', ') ?? '';
   const pos = np ? progressAt(np, playing ? now : np.fetchedAt) : 0;
 
   return (
-    <section className={`dnp${className ? ' ' + className : ''}`} data-playing={playing} data-paused={!!np && !playing} data-status={status}
-      aria-label="Spotify" style={{ ['--s' as string]: `${size}px`, ['--rc' as string]: size >= 300 ? '8px' : '4px', ['--vinyl' as string]: color, ...style }}>
+    <section className={`dnp${bare ? ' dnp-bare' : ''}${className ? ' ' + className : ''}`} data-playing={playing} data-paused={!!np && !playing} data-status={status}
+      aria-label="Spotify" style={{ ['--s' as string]: typeof size === 'number' ? `${size}px` : size, ['--rc' as string]: px >= 300 ? '8px' : '4px', ['--vinyl' as string]: color, ...style }}>
       <style>{CSS}</style>
       <div className="dnp-stage">
         <div className="dnp-vinyl" aria-hidden="true">
@@ -124,7 +130,7 @@ export function NowPlayingBlock({ spotifyLogoSrc, nowPlaying: np, status, onConn
         </div>
       </div>
 
-      <div className="dnp-dashy"><Dashy state={dashy} size="100%" shape="square" /></div>
+      {showDashy && <div className="dnp-dashy"><Dashy state={dashy} size="100%" shape="square" /></div>}
 
       <div className="dnp-meta">
         {np ? (

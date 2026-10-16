@@ -3,7 +3,7 @@
     "target": "ES2020", "module": "ESNext", "moduleResolution": "Bundler",
     "lib": ["ES2020", "DOM"], "jsx": "react-jsx", "strict": true, "noImplicitAny": false,
     "declaration": true, "emitDeclarationOnly": true, "outDir": "dist",
-    "skipLibCheck": true, "types": ["node"]
+    "skipLibCheck": true, "types": ["node", "vite/client"]
   },
-  "include": ["src", "tests", "api", "scripts"]
+  "include": ["src", "tests", "api", "scripts", "app", "vite.config.ts"]
 }

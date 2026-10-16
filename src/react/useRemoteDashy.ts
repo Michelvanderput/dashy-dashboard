@@ -4,6 +4,8 @@ import { CALM, fetchDashyState, type RemoteState, type StateClientOptions } from
 export interface RemoteOptions extends StateClientOptions {
   /** How often to ask when nothing is expected to change. Default 15 s. */
   intervalMs?: number;
+  /** false = do not poll at all (nothing configured). Default true. */
+  enabled?: boolean;
 }
 
 /**
@@ -12,8 +14,9 @@ export interface RemoteOptions extends StateClientOptions {
  */
 export function useRemoteDashy(o: RemoteOptions): RemoteState {
   const [s, setS] = useState<RemoteState>({ ...CALM });
-  const { url, token, intervalMs = 15_000, timeoutMs, fetch: f } = o;
+  const { url, token, intervalMs = 15_000, timeoutMs, fetch: f, enabled = true } = o;
   useEffect(() => {
+    if (!enabled) { setS({ ...CALM }); return; }
     let stop = false, timer: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
       if (stop) return;
@@ -28,6 +31,6 @@ export function useRemoteDashy(o: RemoteOptions): RemoteState {
     const onVisible = () => { if (!document.hidden) { clearTimeout(timer); void tick(); } };
     document.addEventListener('visibilitychange', onVisible);
     return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [url, token, intervalMs, timeoutMs, f]);
+  }, [url, token, intervalMs, timeoutMs, f, enabled]);
   return s;
 }

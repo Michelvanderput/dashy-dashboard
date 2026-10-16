@@ -4,7 +4,8 @@ export interface RemoteState {
     line: string;
     source: 'driver' | 'claude' | 'fallback';
     nextWakeAt: number | null;
-    rev: number;
+    rev: number; /** which driver rule decided, when the server says */
+    rule?: string;
 }
 export interface StateClientOptions {
     url: string;

@@ -8,3 +8,6 @@ export type { NowPlayingBlockProps } from './NowPlayingBlock';
 export type { SpotifyStatus } from '../spotify/session';
 export { useSpotify } from './useSpotify';
 export type { UseSpotifyOptions } from './useSpotify';
+export { Dashboard } from './dashboard/Dashboard';
+export type { DashboardMusic, DashboardProps } from './dashboard/Dashboard';
+export { useNow, useFocus, useOrientation } from './dashboard/hooks';

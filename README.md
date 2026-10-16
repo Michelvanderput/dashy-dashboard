@@ -133,6 +133,26 @@ const sp = useSpotify({ clientId: SPOTIFY_CLIENT_ID, redirectUri: 'https://jouw-
 - **Tempo:** Dashy danst in zijn eigen tempo uit `core.ts`, niet op het ritme van het nummer.
 - **Verminder beweging:** de plaat blijft stil. Het polling staat stil als het venster verborgen is.
 
+## Het scherm: losse blokken (`npm run dev`)
+
+Een rustig bento-scherm met vijf blokken: **Dashy**, **Straks**, **Planning**, **Muziek** en **Vandaag**. Zolang alles rustig is, staat elk blok op zijn plek. Heeft iets aandacht nodig, dan groeit dat blok soepel tot ongeveer het halve scherm en worden de andere kleiner maar leesbaar.
+
+| Wat | Dan groeit |
+|---|---|
+| Deadline binnen 15 minuten | Dashy (hij wordt boos) |
+| Afspraak binnen 10 minuten | Straks |
+| Dashy zit vast of wacht op jou | Dashy |
+| Deadline binnen een uur | Planning |
+| Taak afgevinkt | Dashy, 4 seconden |
+| Er begint muziek | Muziek, 8 seconden |
+
+- **Zelf vergroten:** elk blok heeft een knop. Een tik vergroot het 10 minuten, nog een tik of Escape laat los. Wat jij kiest wint altijd.
+- **Niet flapperen:** een minder belangrijke verandering wacht tot het huidige blok minstens 10 seconden groot is geweest.
+- **Soepel:** alleen de kolom- en rijmaten van het grid veranderen; de browser animeert dat, en de inhoud van de blokken past zich aan. Bij "verminder beweging" springt het direct.
+- **Staand en liggend** (telefoon aan de lader, tablet, desktop) hebben elk hun eigen indeling met dezelfde regels.
+- **Dashy's blok is zijn lichaam:** het witte blok is zijn lijf, de ogen staan er direct op. Het lijf ademt, stuitert, wordt platgedrukt en kantelt zoals `core.ts` dat berekent, en de tekst erop beweegt mee zonder te kantelen. Hij kijkt naar het blok dat aandacht nodig heeft, en een tik op zijn lijf laat hem schrikken. Het lichaam blijft **gegarandeerd binnen zijn eigen cel**: de beweging past in de tussenruimte naar de buren en de schermrand, dus hij komt nooit over of achter een ander blok.
+- **Demo:** rechtsonder staat een knop "Demo" om elke situatie meteen te proberen. Met `VITE_SPOTIFY_CLIENT_ID` (zie `.env.example`) gebruikt het blok echte Spotify; met `VITE_DASHY_STATE_URL` en `VITE_DASHY_STATE_TOKEN` stuurt Claude via de MCP Dashy aan, en verdwijnt het demo-paneel.
+
 ## Andere platforms
 
 | Platform | Aanpak |
