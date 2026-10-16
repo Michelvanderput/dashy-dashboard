@@ -5,7 +5,8 @@ const env = import.meta.env as Record<string, string | undefined>;
 /** Two things for now: the avatar and the music player. Everything else is rebuilt from here. */
 export function App() {
   const spotifyId = env.VITE_SPOTIFY_CLIENT_ID;
-  const sp = useSpotify({ clientId: spotifyId ?? 'not-configured', redirectUri: env.VITE_SPOTIFY_REDIRECT_URI ?? `${location.origin}/` });
+  const redirectUri = env.VITE_SPOTIFY_REDIRECT_URI ?? `${location.origin}/`;
+  const sp = useSpotify({ clientId: spotifyId ?? 'not-configured', redirectUri });
   const nowPlaying = spotifyId ? sp.nowPlaying : null;
 
   // Dashy dances while music plays, otherwise he is calm.
@@ -22,6 +23,11 @@ export function App() {
         <h2 id="mu" className="sr">Muziek</h2>
         <NowPlayingBlock bare showDashy={false} nowPlaying={nowPlaying} status={spotifyId ? sp.status : 'error'} size="min(40vmin,180px)"
           onConnect={spotifyId ? sp.connect : undefined} onDisconnect={spotifyId ? sp.disconnect : undefined} error={spotifyId ? sp.error : 'Spotify is nog niet gekoppeld: zet VITE_SPOTIFY_CLIENT_ID (zie README).'} spotifyLogoSrc={env.VITE_SPOTIFY_LOGO} />
+        {spotifyId && sp.status !== 'connected' && (
+          <p style={{ margin: 0, fontSize: '.8rem', opacity: .7, textAlign: 'center', overflowWrap: 'anywhere' }}>
+            Deze app stuurt Spotify terug naar <code>{redirectUri}</code>. Precies dit adres moet bij Redirect URIs in je Spotify-app staan.
+          </p>
+        )}
       </section>
     </main>
   );

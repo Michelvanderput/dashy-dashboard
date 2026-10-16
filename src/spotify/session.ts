@@ -46,7 +46,7 @@ export function createSpotifySession(o: SessionOptions) {
 
   let state: SessionState = { status: 'disconnected', nowPlaying: null };
   const subs = new Set<() => void>();
-  let timer: unknown, running = false, inFlight = false, errors = 0, tok: TokenSet | null = null, refreshing: Promise<TokenSet | null> | null = null;
+  let callback: Promise<void> | null = null, timer: unknown, running = false, inFlight = false, errors = 0, tok: TokenSet | null = null, refreshing: Promise<TokenSet | null> | null = null;
 
   const set = (s: SessionState) => { state = s; subs.forEach(fn => fn()); };
   const schedule = (ms: number) => { clearT(timer); if (running) timer = setT(() => { void poll(); }, ms); };
@@ -99,17 +99,22 @@ export function createSpotifySession(o: SessionOptions) {
       const url = o.currentUrl?.();
       const u = url ? new URL(url) : null;
       if (u && (u.searchParams.has('code') || u.searchParams.has('error')) && u.searchParams.has('state')) {
-        set({ status: 'connecting', nowPlaying: null });
-        try {
-          tok = await completeLogin({ clientId: o.clientId, callbackUrl: url!, pending, fetch: f, now: now() });
-          saveTokens(tokens, tok);
-        } catch (e) {
-          tok = null;
-          const reason = e instanceof AuthError ? e.reason : 'exchange';
-          set({ status: 'error', nowPlaying: null, error: reason === 'denied' ? MESSAGES.denied : MESSAGES.login });
-        }
-        for (const k of ['code', 'state', 'error']) u.searchParams.delete(k);
-        o.replaceUrl?.(u.toString());
+        // The return from Spotify is handled exactly once per session, even when start() runs twice (React StrictMode runs
+        // effects twice in development): the code is single use, so a second attempt would fail and show a false error.
+        callback ??= (async () => {
+          set({ status: 'connecting', nowPlaying: null });
+          try {
+            tok = await completeLogin({ clientId: o.clientId, callbackUrl: url!, pending, fetch: f, now: now() });
+            saveTokens(tokens, tok);
+          } catch (e) {
+            tok = null;
+            const reason = e instanceof AuthError ? e.reason : 'exchange';
+            set({ status: 'error', nowPlaying: null, error: reason === 'denied' ? MESSAGES.denied : MESSAGES.login });
+          }
+          for (const k of ['code', 'state', 'error']) u.searchParams.delete(k);
+          o.replaceUrl?.(u.toString());
+        })();
+        await callback;
         if (!tok) return;
       } else {
         tok = loadTokens(tokens);

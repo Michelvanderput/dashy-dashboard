@@ -256,3 +256,18 @@ test('session: stop() cancels timers and ignores answers that arrive late', asyn
   assert.notEqual(h.s.getState().status, 'connected'); assert.equal(h.timers.length, 0);
 });
 
+
+test('session: returning from Spotify works when start() runs twice (React StrictMode in development)', async () => {
+  const h = harness();
+  await h.s.connect();
+  const state = new URL(h.navigated[0]).searchParams.get('state')!;
+  h.url = `https://app/cb?code=THECODE&state=${state}`;
+  h.respond = url => url.includes('/api/token') ? json({ access_token: 'AT', refresh_token: 'RT', expires_in: 3600 }) : json(track());
+  const first = h.s.start(); h.s.stop(); const second = h.s.start(); // mount, cleanup, mount again before the first one is done
+  await Promise.all([first, second]);
+  assert.equal(h.s.getState().status, 'connected', JSON.stringify(h.s.getState()));
+  assert.equal(h.s.getState().error, undefined);
+  assert.equal(h.calls.filter(c => c.url.includes('/api/token')).length, 1, 'the single-use code is exchanged once');
+  assert.equal(h.url, 'https://app/cb', 'code and state are removed from the address bar');
+  assert.equal(loadTokens(h.tokens)!.refreshToken, 'RT'); h.s.stop();
+});
