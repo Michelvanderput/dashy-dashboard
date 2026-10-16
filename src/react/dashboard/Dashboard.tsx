@@ -35,7 +35,6 @@ export interface DashboardProps {
 }
 
 const TITLES: Record<BlockId, string> = { dashy: 'Dashy', now: 'Straks', plan: 'Planning', music: 'Muziek', clock: 'Vandaag' };
-const STATE_NAMES: Record<DashyState, string> = { idle: 'Rustig', received: 'Genoteerd', working: 'Aan het werk', thinking: 'Denkt na', waiting: 'Wacht op jou', blocked: 'Zit vast', done: 'Klaar', happy: 'Blij', sad: 'Sip', angry: 'Boos', strict: 'Streng', dancing: 'Danst', sleepy: 'Slaperig' };
 const dateFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
 
 const Chevrons = () => (
@@ -43,13 +42,19 @@ const Chevrons = () => (
 );
 
 /**
- * Dashy's block IS his body: the white card is the body, his eyes are drawn on it, and it moves the way core.ts moves a body
- * (breathing, hopping, squashing, tilting, shaking). The text on it rides along with the movement but never tilts or squashes.
- * He looks at the block that needs attention, and a tap on his body startles him.
+ * Dashy lives on the page, without a card behind him: his white body is the block. There is air above him and beside him
+ * and a floor below, and he moves in that space the way core.ts moves a body (breathing, hopping, squashing, tilting, shaking).
+ * His body is guaranteed to stay inside that open space, so it never touches another block. He looks at the block that
+ * needs attention; a tap on his body startles him, a tap beside him makes his block grow.
  */
-function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, children }: { state: DashyState; focus: boolean; attn: boolean; onToggle: (b: BlockId) => void; lookAt: BlockId | null; rootRef: RefObject<HTMLElement | null>; children: ReactNode }) {
+function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, say, why }: { state: DashyState; focus: boolean; attn: boolean; onToggle: (b: BlockId) => void; lookAt: BlockId | null; rootRef: RefObject<HTMLElement | null>; say: string; why: string }) {
   const section = useRef<HTMLElement>(null), card = useRef<HTMLDivElement>(null);
-  const { look } = useDashyBody(card, section, state);
+  // free room around the body: the smallest of the air above, beside and below it (measured, never guessed)
+  const room = () => {
+    const sec = section.current, c = card.current; if (!sec || !c) return 0;
+    return 0.85 * Math.max(0, Math.min(c.offsetTop, (sec.offsetWidth - c.offsetWidth) / 2, sec.offsetHeight - c.offsetTop - c.offsetHeight));
+  };
+  const { look } = useDashyBody(card, section, state, { room });
   useEffect(() => {
     if (!lookAt) return;
     const aim = () => {
@@ -62,27 +67,26 @@ function BodyBlock({ state, focus, attn, onToggle, lookAt, rootRef, children }: 
     return () => clearInterval(t);
   }, [lookAt, rootRef]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <section ref={section} className="db-block db-bodyblock" data-block="dashy" data-focus={focus} data-attn={attn} aria-labelledby="db-title-dashy" style={{ ['--area' as string]: 'dashy' }}>
+    <section ref={section} className="db-block db-bodyblock" data-block="dashy" data-focus={focus} data-attn={attn} aria-labelledby="db-title-dashy" style={{ ['--area' as string]: 'dashy' }}
+      onClick={e => { if (!(e.target as Element).closest(`${INTERACTIVE}, .db-bodycard`)) onToggle('dashy'); }}>
+      <h2 className="db-sr" id="db-title-dashy">{TITLES.dashy}</h2>
+      <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES.dashy}` : `Vergroot ${TITLES.dashy}`} onClick={() => onToggle('dashy')}><Chevrons /></button>
+      <div className="db-floor" aria-hidden="true" />
       <div ref={card} className="db-bodycard" />
-      <div className="db-inner">
-        <header className="db-head">
-          <h2 className="db-title" id="db-title-dashy">{TITLES.dashy}</h2>
-          <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES.dashy}` : `Vergroot ${TITLES.dashy}`} onClick={() => onToggle('dashy')}><Chevrons /></button>
-        </header>
-        <div className="db-body">{children}</div>
-      </div>
+      <div className="db-say"><p className="db-line">{say}</p><p className="db-why">{why}</p></div>
     </section>
   );
 }
 
+const INTERACTIVE = 'button, a, input, [role="checkbox"]';
+
 function Block({ id, focus, attn, onToggle, children }: { id: BlockId; focus: boolean; attn: boolean; onToggle: (b: BlockId) => void; children: ReactNode }) {
   const label = `db-title-${id}`;
   return (
-    <section className="db-block" data-block={id} data-focus={focus} data-attn={attn} aria-labelledby={label} style={{ ['--area' as string]: id }}>
-      <header className="db-head">
-        <h2 className="db-title" id={label}>{TITLES[id]}</h2>
-        <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES[id]}` : `Vergroot ${TITLES[id]}`} onClick={() => onToggle(id)}><Chevrons /></button>
-      </header>
+    <section className="db-block" data-block={id} data-focus={focus} data-attn={attn} aria-labelledby={label} style={{ ['--area' as string]: id }}
+      onClick={e => { if (!(e.target as Element).closest(INTERACTIVE)) onToggle(id); }}>
+      <h2 className="db-sr" id={label}>{TITLES[id]}</h2>
+      <button type="button" className="db-toggle" aria-pressed={focus} aria-label={focus ? `Verklein ${TITLES[id]}` : `Vergroot ${TITLES[id]}`} onClick={() => onToggle(id)}><Chevrons /></button>
       <div className="db-body">{children}</div>
     </section>
   );
@@ -137,13 +141,7 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
       <div className="db-sr" role="status" aria-live="polite">{announce}</div>
 
       {BLOCKS.map(id => id === 'dashy' ? (
-        <BodyBlock key={id} state={dashyState} focus={focus.block === id} attn={attn(id)} onToggle={toggle} lookAt={lookAt} rootRef={root}>
-          <div className="db-dashy">
-            <p className="db-chip">{STATE_NAMES[dashyState]}</p>
-            <p className="db-line">{dashyText}</p>
-            <p className="db-why">{focus.block === 'dashy' ? focus.reason : ''}</p>
-          </div>
-        </BodyBlock>
+        <BodyBlock key={id} state={dashyState} focus={focus.block === id} attn={attn(id)} onToggle={toggle} lookAt={lookAt} rootRef={root} say={dashyText} why={focus.block === 'dashy' ? focus.reason : ''} />
       ) : (
         <Block key={id} id={id} focus={focus.block === id} attn={attn(id)} onToggle={toggle}>
           {id === 'now' && (
@@ -165,7 +163,7 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
                   <li key={i.id} className="db-item" data-kind={i.kind} data-done={!!i.done} data-urgency={urgency(i, now)}>
                     {i.kind === 'task'
                       ? <button type="button" className="db-check" role="checkbox" aria-checked={!!i.done} aria-label={`${i.title}: markeer als ${i.done ? 'niet klaar' : 'klaar'}`} onClick={() => onToggleDone?.(i.id, !i.done)}><i /></button>
-                      : <span className="db-dot" aria-hidden="true" />}
+                      : <span aria-hidden="true" />}
                     <span className="db-name">{i.title}{i.kind === 'event' && <span className="db-sr"> (afspraak)</span>}</span>
                     <span className="db-time">{i.at !== null ? (i.done ? '' : clock(i.at)) : ''}</span>
                     {i.note && <span className="db-note">{i.note}</span>}

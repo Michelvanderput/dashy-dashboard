@@ -1,4 +1,3 @@
-import { type BodyMotionOptions } from './render';
 import { type Variant } from './small';
 import { type Dashy, type DashyOptions, type DashyState, type Shape } from './core';
 export interface MountOptions extends DashyOptions {
@@ -16,8 +15,11 @@ export interface MountOptions extends DashyOptions {
      * `vars` receives --dbx and --dby (px): how far the body moved, so text on it can ride along.
      */
     body?: {
-        vars?: HTMLElement;
-    } & BodyMotionOptions;
+        vars?: HTMLElement; /** px, or a function that is read whenever the size changes */
+        room?: number | (() => number);
+        gain?: number;
+        squashGain?: number;
+    };
 }
 export interface DashyHandle {
     dashy: Dashy;

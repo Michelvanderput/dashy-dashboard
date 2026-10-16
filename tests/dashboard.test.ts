@@ -202,9 +202,9 @@ test('body motion: with no room the body does not move at all; with room it real
 test('body motion: squashing inwards is allowed in full, stretching is limited to the room, a long card does not balloon', () => {
   const rest = createDashy({ seed: 1 }).step(0);
   const squash = bodyMotion({ ...rest, body: { ...rest.body, sx: 1.1, sy: 0.9 } }, 400, 400, { room: 10 });
-  assert.ok(Math.abs(squash.sy - 0.9) < 1e-9, 'compressing keeps the full squash');
-  assert.ok((squash.sx - 1) * 200 <= 0.3 * 10 + 1e-9, 'widening stays within its budget');
-  const long = bodyMotion({ ...rest, body: { ...rest.body, sx: 1.1 } }, 1100, 140, { room: 30 }); assert.ok((long.sx - 1) * 550 <= 0.3 * 30 + 1e-9);
+  assert.ok(squash.sy <= 0.9 + 1e-9 && squash.sy >= 0.75 - 1e-9, 'compressing is free (and amplified by the squash gain)');
+  assert.ok((squash.sx - 1) * 200 <= 0.25 * 10 + 1e-9, 'widening stays within its budget');
+  const long = bodyMotion({ ...rest, body: { ...rest.body, sx: 1.1 } }, 1100, 140, { room: 30 }); assert.ok((long.sx - 1) * 550 <= 0.25 * 30 + 1e-9);
 });
 test('body motion: at rest he hardly moves, and the radius follows core.ts', () => {
   const rest = createDashy({ seed: 1 }).step(0);

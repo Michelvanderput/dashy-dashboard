@@ -38,34 +38,36 @@ export function layout(G: Geometry, small = false): Layout {
 
 export interface BodyMotionOptions {
   /**
-   * Free room in px around the card: how far the body may reach beyond its resting rectangle in any direction
-   * (the gap to the neighbouring blocks and to the screen edge). The body is guaranteed to stay within it.
+   * Free room in px around the body: how far it may reach beyond its resting rectangle in any direction
+   * (the air above and beside it). The body is guaranteed to stay within it.
    */
   room?: number;
-  /** Multiplies the hop and shake before the limit applies (core.ts moves a small figure). Default 3. */
+  /** Multiplies the hop and shake before the limit applies (core.ts moves a small figure). Default 4. */
   gain?: number;
+  /** Multiplies the squash and stretch before the limit applies. Default 2. */
+  squashGain?: number;
 }
 export interface BodyMotion { dx: number; dy: number; rot: number; sx: number; sy: number; radius: number; u: number }
 
 /**
- * Body mode: turns core.ts's body (made for a 220-unit square) into a transform for a card of any shape and size.
+ * Body mode: turns core.ts's body (made for a 220-unit square) into a transform for a body of any size.
  * Pure. Presentation only: it scales and limits the numbers core.ts gives, it adds no movement of its own.
  *
- * Containment, by construction: the room is split into three budgets that add up to at most the room, so the card never
- * reaches past it, whatever core.ts does: shift 40%, tilt 30%, growth (stretching) 30%. Squashing inwards is free.
- * - u: px per core unit, from the SHORT side (the body is a square, a long card is just a bigger one)
- * - hop and shake: core units x u x gain, at most 40% of the room
- * - tilt about the bottom centre: the farthest corner moves at most 30% of the room
- * - stretch: grows at most 30% of the room per side; shrinking is unlimited (it stays inside anyway)
+ * Containment, by construction: the room is split into three budgets that add up to at most the room, so the body never
+ * reaches past it, whatever core.ts does: shift 35%, tilt 40%, growth (stretching) 25%. Squashing inwards is free.
+ * - u: px per core unit, from the SHORT side
+ * - hop and shake: core units x u x gain, at most 35% of the room
+ * - tilt about the bottom centre: the farthest corner moves at most 40% of the room
+ * - stretch: grows at most 25% of the room per side; shrinking is unlimited (it stays inside anyway)
  */
 export function bodyMotion(G: Geometry, w: number, h: number, o: BodyMotionOptions = {}): BodyMotion {
-  const gain = o.gain ?? 3, room = Math.max(0, o.room ?? 0);
+  const gain = o.gain ?? 4, squashGain = o.squashGain ?? 2, room = Math.max(0, o.room ?? 0);
   const short = Math.min(w, h), u = short / 220;
   const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
-  const shift = 0.4 * room, swing = 0.3 * room, grow = 0.3 * room;
-  const sq = (v: number, side: number, total: number) => Math.max(-0.25, Math.min((v - 1) * (short / total), grow / side));
+  const shift = 0.35 * room, swing = 0.4 * room, grow = 0.25 * room;
+  const sq = (v: number, side: number, total: number) => Math.max(-0.25, Math.min((v - 1) * squashGain * (short / total), grow / side));
   const sx = 1 + sq(G.body.sx, w / 2, w), sy = 1 + sq(G.body.sy, h, h); // each side grows by (sx-1)*w/2; pivot at the bottom: all of sy's growth goes up
-  // CSS scales first and tilts after, so the tilt works on the scaled card: about the bottom centre a corner moves at most
+  // CSS scales first and tilts after, so the tilt works on the scaled body: about the bottom centre a corner moves at most
   // max(h*sy, w/2*sx)*sin(t) + (w/2*sx)*(1 - cos(t)); solve for the largest t within the tilt budget
   const lever = Math.max(h * sy, (w / 2) * sx);
   let lo = 0, hi = Math.PI / 4;

@@ -179,13 +179,28 @@ describe("Dashy's block is his body", () => {
     vi.unstubAllGlobals();
   });
 
-  it('a tap on his body startles him (four taps make him angry); a tap on a button does not', () => {
+  it('a tap on his body startles him (four taps make him angry); a tap on a button or beside him does not', () => {
     const { container } = render(<Dashboard {...base()} />);
     const toggle = screen.getByRole('button', { name: 'Vergroot Dashy' });
     for (let i = 0; i < 6; i++) fireEvent.pointerDown(toggle);
+    for (let i = 0; i < 6; i++) fireEvent.pointerDown(block(container, 'dashy')); // beside the body, on his open space
     expect(dashyLabel(container)).toBe('Dashy wacht rustig');
-    for (let i = 0; i < 4; i++) fireEvent.pointerDown(block(container, 'dashy'));
+    for (let i = 0; i < 4; i++) fireEvent.pointerDown(card(container));
     expect(dashyLabel(container)).toBe('Dashy is boos');
+  });
+
+  it('a tap beside him makes his block grow (a tap on his body does not)', () => {
+    const { container } = render(<Dashboard {...base()} />);
+    fireEvent.click(card(container)); expect(root(container).dataset.focus).toBe('none');
+    fireEvent.click(block(container, 'dashy')); expect(root(container).dataset.focus).toBe('dashy');
+  });
+
+  it('he has no card behind him: the block is open space with a floor, and his body is a square with air around it', () => {
+    const { container } = render(<Dashboard {...base()} />);
+    const css = container.querySelector('style')!.textContent!;
+    expect(css).toMatch(/\.db-bodyblock[^{]*\{[^}]*background:none/);
+    expect(css).toMatch(/\.db-bodycard\{[^}]*width:var\(--body\);height:var\(--body\)/); // a square, not a slab
+    expect(block(container, 'dashy').querySelector('.db-floor')).not.toBeNull();
   });
 
   it('unmounting gives the card back (no leftover transform, no running loop)', () => {
