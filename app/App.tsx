@@ -1,4 +1,5 @@
-import { DashyBody, NowPlayingBlock, useSpotify } from '../src/react';
+import { useRef, useState } from 'react';
+import { Dashy, DashyBody, NowPlayingBlock, useSpotify } from '../src/react';
 import type { DashyState } from '../src';
 
 const env = import.meta.env as Record<string, string | undefined>;
@@ -29,8 +30,65 @@ export function App() {
           </p>
         )}
       </section>
+      <Playground />
     </main>
   );
+}
+
+const DEF = {
+  schema: 'dashy/avatar-definition', schemaVersion: 1,
+  expressions: {
+    smug: { state: 'idle', look: { cover: 0.45, lidA: -6, low: 0.2 } },
+    wow: { state: 'idle', look: { eh: 88, cover: 0, sd: 4 } },
+    suspicious: { state: 'idle', look: { cover: 0.5, lidA: 14, asym: 0.4 } },
+  },
+  sequences: {
+    hello: { mode: 'once', steps: [{ expression: 'wow', holdMs: 700, transitionMs: 150, ease: 'snappy' }, { expression: 'smug', holdMs: 800, transitionMs: 300 }, { expression: 'happy', holdMs: 1000, transitionMs: 250 }] },
+    moods: { mode: 'pingPong', blink: { minMs: 700, maxMs: 1400 }, steps: [{ expression: 'idle', holdMs: 900, transitionMs: 400, ease: 'smooth' }, { expression: 'suspicious', holdMs: 900, transitionMs: 300 }, { expression: 'wow', holdMs: 700, transitionMs: 150, ease: 'snappy' }, { expression: 'sad', holdMs: 900, transitionMs: 500, ease: 'smooth' }] },
+  },
+};
+const THEMES: Record<string, { body: string; eyes: string; outline: string }> = {
+  wit: { body: '#ffffff', eyes: '#101214', outline: '#c9c9c4' },
+  zon: { body: '#ffe7a8', eyes: '#2a1b3d', outline: '#e0c47a' },
+  munt: { body: '#c9f2dd', eyes: '#0f3b2a', outline: '#8fd1b0' },
+  nacht: { body: '#232a4a', eyes: '#f2f4ff', outline: '#3b4577' },
+};
+const STATES: DashyState[] = ['idle', 'working', 'thinking', 'waiting', 'blocked', 'done', 'happy', 'sad', 'angry', 'strict', 'dancing', 'sleepy'];
+
+/** Speelveld voor de nieuwe mogelijkheden: sterk aangezet zodat je het meteen ziet. */
+function Playground() {
+  const [state, setState] = useState<DashyState>('idle');
+  const [seq, setSeq] = useState<string | undefined>();
+  const [theme, setTheme] = useState('zon');
+  const [strong, setStrong] = useState(true);
+  const [turn, setTurn] = useState(true);
+  const [shape, setShape] = useState<'square' | 'circle'>('square');
+  const [url, setUrl] = useState<string | null>(null);
+  const host = useRef<HTMLDivElement>(null);
+  const snap = async () => {
+    // snapshot via the handle is internal to <Dashy />; serialise the live SVG instead (same drawing).
+    const svg = host.current!.querySelector('svg')!.cloneNode(true) as SVGSVGElement;
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    setUrl(URL.createObjectURL(new Blob([svg.outerHTML], { type: 'image/svg+xml' })));
+  };
+  const chip = (on: boolean): React.CSSProperties => ({ padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(0,0,0,.15)', background: on ? '#17181a' : 'transparent', color: on ? '#fff' : 'inherit', cursor: 'pointer', font: 'inherit' });
+  return (
+    <section aria-labelledby="pg" style={{ ...card, gridColumn: '1 / -1' }}>
+      <h2 id="pg" style={{ margin: 0, fontSize: '1rem' }}>Speelveld</h2>
+      <div ref={host} style={{ width: 'min(60vmin,260px)' }}>
+        <Dashy size="100%" state={state} shape={shape} definition={DEF} sequence={seq} colors={THEMES[theme]} ambient={strong ? 2 : false} perspective={turn ? 1.8 : false} />
+      </div>
+      <p style={{ margin: 0, fontSize: '.85rem', opacity: .7 }}>Beweeg je muis om hem te laten kijken.</p>
+      <Row label="Toestand">{STATES.map(k => <button key={k} style={chip(!seq && state === k)} onClick={() => { setSeq(undefined); setState(k); }}>{k}</button>)}</Row>
+      <Row label="Sequentie">{[['hello', 'hallo (1x)'], ['moods', 'buien (heen en weer)']].map(([k, n]) => <button key={k} style={chip(seq === k)} onClick={() => setSeq(seq === k ? undefined : k)}>{n}</button>)}</Row>
+      <Row label="Kleur">{Object.keys(THEMES).map(k => <button key={k} style={chip(theme === k)} onClick={() => setTheme(k)}>{k}</button>)}</Row>
+      <Row label="Vorm"><button style={chip(shape === 'square')} onClick={() => setShape('square')}>vierkant</button><button style={chip(shape === 'circle')} onClick={() => setShape('circle')}>rond</button></Row>
+      <Row label="Leven"><button style={chip(strong)} onClick={() => setStrong(!strong)}>ambient {strong ? 'aan' : 'uit'}</button><button style={chip(turn)} onClick={() => setTurn(!turn)}>kopdraai {turn ? 'aan' : 'uit'}</button><button style={chip(false)} onClick={snap}>foto (SVG)</button>{url && <a href={url} download="dashy.svg">download</a>}</Row>
+    </section>
+  );
+}
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: '.8rem', opacity: .6, minWidth: '5rem', textAlign: 'right' }}>{label}</span>{children}</div>;
 }
 
 const card: React.CSSProperties = { display: 'grid', gap: 16, justifyItems: 'center', alignContent: 'center', padding: 'clamp(18px,3vmin,32px)', borderRadius: 28, background: 'var(--card)' };
