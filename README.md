@@ -146,6 +146,17 @@ Bovenaan het scherm staat de tijd groot, met de datum en het weeknummer. Ernaast
 - Het laatste goede antwoord wordt onthouden en direct getoond. Lukt verversen niet, dan blijft dat staan; na zes uur zonder vers antwoord verdwijnt het weer liever dan dat het fout is.
 - De taken staan nu als een groot "Nu doen"-blok (categoriekleur, tijd, notitie, één grote Klaar-knop) met daaronder "Daarna". Een verstreken tijd heet "nog open", nooit "te laat".
 
+## Een planner die jou het eerst aanspreekt
+
+Het scherm wacht niet tot je iets opent: op drie momenten komt er in plaats van de "Daarna"-lijst een korte, genummerde briefing, in kleine letters en rustige toon (`src/briefing.ts`).
+
+- **05:00 tot 11:00, ochtendplan:** de afspraak van vandaag en je taken op een rij.
+- **11:00 tot 17:00, middagduwtje:** hoeveel er al klaar is (of "nog niets afgevinkt, dat mag") en één of twee kleine volgende stappen.
+- **17:00 tot 23:00, avondcheck:** wat er klaar is, een herinnering om uren te boeken en wat er straks nog staat.
+- 's Nachts blijft het stil. Er staan geen schuld, geen streaks en geen "te laat" in.
+
+Het weet alleen wat je erin zet: wat niet in je taken staat, kan het ook niet melden. Het blijft op het scherm; berichten naar je telefoon zitten er niet in.
+
 ## Afspraak en dagbalk op het scherm
 
 Onder Dashy staat je dag in één oogopslag (`src/day.ts`, `DayPanel`):

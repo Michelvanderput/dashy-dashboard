@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useFit, useSpotify, useWakeLock } from '../src/react';
-import { burnInOffset, isKiosk, parsePlace, type DashyState } from '../src';
+import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useFit, useMinute, useSpotify, useWakeLock } from '../src/react';
+import { briefing, burnInOffset, isKiosk, parsePlace, type DashyState } from '../src';
 
 import { initialConnection } from './storage';
 
@@ -38,7 +38,7 @@ export function App() {
   const [conn] = useState(initialConnection);
   const tasks = useDashyTasks({ url: conn?.url, token: conn?.token, actionUrl: conn?.actionUrl, actionToken: conn?.actionToken });
   const state: DashyState = nowPlaying?.playing && tasks.state === 'idle' ? 'dancing' : tasks.state;
-  const snap = tasks.snapshot;
+  const snap = tasks.snapshot, minute = useMinute();
   // free time: after the working day and on days off the whole screen turns warmer (see the styles in index.html)
   const mode = snap?.mode ?? 'work';
   useEffect(() => { document.documentElement.dataset.mode = mode; return () => { delete document.documentElement.dataset.mode; }; }, [mode]);
@@ -72,7 +72,7 @@ export function App() {
 
       <div className="dash-tasks" ref={fitTasks.ref}>
         {tasks.connected && snap ? (
-          <TaskBoard tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} level={fitTasks.level} notes={notes}
+          <TaskBoard plan={briefing(snap, minute)} tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} level={fitTasks.level} notes={notes}
             onComplete={!kiosk ? tasks.complete : undefined} justDone={!kiosk ? tasks.justDone : null} onUndo={!kiosk ? tasks.undo : undefined} />
         ) : tasks.connected ? (
           <p role="status" style={{ margin: 0, opacity: .6 }}>{tasks.error ?? 'Taken laden…'}</p>

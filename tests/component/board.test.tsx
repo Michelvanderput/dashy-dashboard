@@ -40,6 +40,14 @@ describe('<TaskBoard />', () => {
   });
 });
 
+describe('<TaskBoard /> plan', () => {
+  it('shows the moment of the day as a numbered list instead of "Daarna"', () => {
+    render(<TaskBoard now={at(8, 0)} tasks={[task({})]} plan={{ kind: 'morning', title: 'ochtendplan', lead: 'dit staat er vandaag:', items: ['Bel de bank', 'Pak dozen in'] }} />);
+    expect(screen.getByText('= ochtendplan')).toBeTruthy(); expect(screen.getByText('dit staat er vandaag:')).toBeTruthy();
+    expect(screen.getAllByRole('listitem').map(l => l.textContent)).toEqual(['Bel de bank', 'Pak dozen in']); expect(screen.queryByText('Daarna')).toBeNull();
+  });
+});
+
 describe('<Clock />', () => {
   it('shows the Dutch time, the date with a capital and the week', () => {
     render(<Clock now={at(9, 5)} />);

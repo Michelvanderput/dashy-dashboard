@@ -72,3 +72,22 @@ test('a dashboard never scrolls: the page is locked to the screen and every bloc
   assert.match(css, /\.dash\{[^}]*height:100dvh;overflow:hidden/);
   assert.doesNotMatch(css, /min-height:100dvh/);
 });
+
+import { briefing, briefingKind } from '../src/briefing';
+test('briefing: a plan in the morning, a nudge in the afternoon, a check-in in the evening, nothing at night', () => {
+  const at = (h: number, m = 0) => zonedToEpoch(2026, 10, 16, h, m)!;
+  const t = (id: string, title: string, state: 'now' | 'later', when = '') => ({ id, title, category: 'thuis', due: null, when, note: '', state });
+  const snap = (o: object) => ({ tasks: [t('a', 'Bel de bank', 'now'), t('b', 'Dozen inpakken', 'later', 'vandaag 15:00')], leftOpen: [], doneToday: 0, appointment: null, mode: 'work', hours: { unbookedMin: 0 }, ...o }) as never;
+  assert.equal(briefingKind(at(4, 59)), null); assert.equal(briefingKind(at(5)), 'morning'); assert.equal(briefingKind(at(11)), 'midday'); assert.equal(briefingKind(at(17)), 'evening'); assert.equal(briefingKind(at(23)), null);
+  const m = briefing(snap({ appointment: { title: 'Standup', at: at(10, 25), endsAt: null }, leftOpen: ['x'] }), at(8))!;
+  assert.equal(m.title, 'ochtendplan'); assert.deepEqual(m.items, ['10:25 Standup', 'Bel de bank', 'Dozen inpakken · vandaag 15:00', '1 nog open van eerder, kies zelf wanneer']);
+  assert.match(briefing(snap({}), at(13))!.lead, /nog niets afgevinkt, dat mag/);
+  assert.match(briefing(snap({ doneToday: 3 }), at(13))!.lead, /^3 klaar vandaag/);
+  const e = briefing(snap({ doneToday: 1, hours: { unbookedMin: 90 } }), at(19))!;
+  assert.equal(e.lead, '1 ding klaar vandaag. dat telt.'); assert.equal(e.items[0], 'uren boeken, dan is het klaar');
+  assert.equal(briefing(snap({}), at(23, 30)), null); assert.equal(briefing(null, at(8)), null);
+  assert.equal(briefing(snap({ tasks: [] }), at(8)), null);
+  const many = briefing(snap({ tasks: [1, 2, 3, 4, 5, 6].map(i => t(`i${i}`, `Taak ${i}`, 'now')) }), at(8))!;
+  assert.equal(many.items.length, 4); assert.equal(many.items[3], 'en nog 3');
+  assert.doesNotMatch(JSON.stringify(m), /te laat|achter|gemist/i);
+});

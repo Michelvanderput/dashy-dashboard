@@ -29,3 +29,4 @@ export { clockParts, isoWeek, msToNextMinute } from './clock';
 export type { ClockParts } from './clock';
 export { DEFAULT_PLACE, WEATHER_MAX_AGE_MS, WEATHER_REFRESH_MS, describeWeather, parsePlace, parseWeather, rainNote, weatherUrl } from './weather';
 export type { Place, Weather, WeatherIcon } from './weather';
+export * from './briefing';

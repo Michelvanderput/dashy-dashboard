@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { taskTiming } from '../day';
+import type { Briefing } from '../briefing';
 import type { DashTask } from '../tasks';
 import { useMinute } from './useMinute';
 
@@ -20,6 +21,8 @@ export interface TaskBoardProps {
   onUndo?: () => void | Promise<unknown>;
   /** Extra quiet lines (not up to date, an error). */
   notes?: string[];
+  /** The moment of the day (morning plan, afternoon nudge, evening check-in). Takes the place of the "Daarna" list. */
+  plan?: Briefing | null;
   /** Smaller, for a low screen. */
   compact?: boolean;
   /** How much to leave out so it fits: 0 all, 1 smaller, 2 also no list, 3 also no note, 4 only the title. Set by the page (useFit). */
@@ -51,6 +54,13 @@ const CSS = `
 .tb-done:hover{filter:brightness(1.18)}.tb-done:active{transform:scale(.97)}
 .tb-done:focus-visible,.tb-link:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
 .tb-sub{margin:0 0 6px;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;font-weight:500}
+.tb-plan h3{margin:0 0 6px;font-size:clamp(1.3rem,3.6vmin,2.2rem);font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.tb-plan p{margin:0 0 10px;opacity:.6;font-size:clamp(.9rem,2vmin,1.1rem)}
+.tb-plan ol{margin:0;padding:0 0 0 1.5em;display:grid;gap:6px;font-weight:300;font-size:clamp(1rem,2.6vmin,1.4rem);line-height:1.3}
+.tb-plan li{padding-left:.2em;overflow-wrap:anywhere}
+.tb-plan li::marker{opacity:.6}
+.tb-compact .tb-plan li:nth-child(n+3),.tb-compact .tb-plan p{display:none}
+.tb-l2 .tb-plan{display:none}
 .tb-next{list-style:none;margin:0;padding:0;display:grid}
 .tb-next li{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 4px;border-bottom:1px solid var(--line)}
 .tb-next li:last-child{border-bottom:0}
@@ -78,7 +88,7 @@ const when = (t: DashTask, now: number) => taskTiming(t, now).chip ?? '';
  * The tasks, built to be read from across a room: what to do now, big, with its time and its note and one big button; then what comes after.
  * Calm on purpose: a time that has passed says "nog open", and nothing here counts what you did not do.
  */
-export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftOpen = 0, doneToday = 0, onComplete, justDone, onUndo, notes = [], compact = false, level = 0, style }: TaskBoardProps) {
+export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftOpen = 0, doneToday = 0, onComplete, justDone, onUndo, notes = [], plan = null, compact = false, level = 0, style }: TaskBoardProps) {
   compact = compact || level >= 1;
   const live = useMinute();
   const now = fixed ?? live;
@@ -107,7 +117,13 @@ export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftO
       ) : (
         <div className="tb-hero"><header className="tb-label"><span>Nu doen</span></header><h2 className="tb-title tb-calm">Niets nu. Rust maar.</h2></div>
       )}
-      {next.length > 0 && (
+      {plan ? (
+        <section className="tb-plan" aria-label={plan.title}>
+          <h3>= {plan.title}</h3>
+          <p>{plan.lead}</p>
+          <ol>{plan.items.map(i => <li key={i}>{i}</li>)}</ol>
+        </section>
+      ) : next.length > 0 && (
         <div>
           <h3 className="tb-sub">{hero ? 'Daarna' : 'Straks'}</h3>
           <ol className="tb-next">
