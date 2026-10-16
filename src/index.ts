@@ -6,3 +6,5 @@ export { DEFAULT_CONFIG, RULES, initialDriverState, nextWakeAt, reduce, resolve 
 export type { DriverConfig, DriverEvent, DriverState, Resolution, RuleName } from './driver';
 export { smallGeometry, SMALL_MAX_PX } from './small';
 export type { Variant } from './small';
+export { ALL_STATES, renderSvg, settledGeometry, stillGeometry } from './static';
+export type { StaticOptions } from './static';

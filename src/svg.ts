@@ -1,3 +1,4 @@
+import { layout } from './render';
 import { smallGeometry, SMALL_MAX_PX, type Variant } from './small';
 import { createDashy, type Dashy, type DashyOptions, type DashyState, type Geometry, type Shape } from './core';
 
@@ -62,24 +63,14 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
   });
 
   let small = opts.variant === 'small';
-  const outlineW = () => (small ? '8' : '1');
+  const set = (el: Element, attrs: Record<string, string>) => { for (const k in attrs) el.setAttribute(k, attrs[k]); };
   function draw(G0: Geometry) {
-    const G = small ? smallGeometry(G0) : G0;
-    outline.setAttribute('stroke-width', outlineW());
-    outline.setAttribute('rx', f(Math.max(0, G.rx - 0.5))); clip.setAttribute('rx', f(G.rx));
-    const b = G.body, fc = G.face;
-    body.setAttribute('transform', `translate(${f(b.tx)} ${f(b.ty)}) rotate(${f(b.rot)}) scale(${f(b.sx)} ${f(b.sy)}) translate(-150 -260)`);
-    face.setAttribute('transform', `translate(${f(fc.tx)} ${f(fc.ty)}) rotate(${f(fc.rot)}) scale(${f(fc.sx)} ${f(fc.sy)})`);
-    G.eyes.forEach((e, i) => {
-      const E = eyes[i], hw = e.ew / 2, eh = e.eh, yb = -eh / 2 + e.cov * eh;
-      E.g.setAttribute('transform', `translate(${f(e.x)} ${f(e.y)}) rotate(${f(e.tilt)})`);
-      E.pill.setAttribute('x', f(-hw)); E.pill.setAttribute('y', f(-eh / 2)); E.pill.setAttribute('width', f(e.ew)); E.pill.setAttribute('height', f(eh)); E.pill.setAttribute('rx', f(Math.min(hw, eh / 2)));
-      E.lid.setAttribute('x', '-90'); E.lid.setAttribute('y', f(yb - 140)); E.lid.setAttribute('width', '180'); E.lid.setAttribute('height', '140');
-      E.lid.setAttribute('transform', `rotate(${f(e.lidA)} 0 ${f(yb)})`);
-      if (e.low > 0.001) {
-        const ry = eh * 0.62, yt = eh / 2 - e.low * eh;
-        E.low.setAttribute('cx', '0'); E.low.setAttribute('cy', f(yt + ry)); E.low.setAttribute('rx', f(e.ew * 0.95)); E.low.setAttribute('ry', f(ry));
-      } else { E.low.setAttribute('rx', '0'); E.low.setAttribute('ry', '0'); }
+    const L = layout(small ? smallGeometry(G0) : G0, small);
+    outline.setAttribute('stroke-width', L.outlineWidth); outline.setAttribute('rx', L.outlineRx); clip.setAttribute('rx', L.clipRx);
+    body.setAttribute('transform', L.body); face.setAttribute('transform', L.face);
+    L.eyes.forEach((e, i) => {
+      const E = eyes[i];
+      E.g.setAttribute('transform', e.group); set(E.pill, e.pill); set(E.lid, e.lid); set(E.low, e.low);
     });
   }
 

@@ -44,6 +44,26 @@ Jouw app vertaalt gebeurtenissen naar een toestand. Voorbeeld:
 | Uur niks gedaan | `sad` |
 | Pauze | `sleepy` |
 
+## Kleine formaten
+
+Op 32 px en kleiner kiest Dashy automatisch een eenvoudiger tekening (`variant: 'auto'`): stilstaand lijf, bredere ogen, dikkere oogleden en een zwaardere rand. Alle beweging komt nog steeds uit `core.ts`. Forceren kan met `variant: 'small'` of `'full'`.
+
+## Statische exports
+
+`npm run export` maakt uit `core.ts` (via Chromium voor de PNG's) alles in `exports/`:
+
+| Map | Inhoud |
+|---|---|
+| `svg/`, `svg/small/` | SVG per toestand (volle en kleine tekening) |
+| `png/` | PNG per toestand, 512 en 128 px, transparant |
+| `app-icon/` | 1024 px per toestand zonder transparantie (voor iOS en macOS) en `apple-touch-icon.png` (180 px) |
+| `favicon/` | `favicon.svg`, `favicon.ico` (16, 32, 48) en per toestand 16 en 32 px |
+| `docs/states.png` | overzicht van alle toestanden |
+
+De achtergrondkleur van de app-iconen staat bovenaan `scripts/export-static.ts` (`ICON_BACKGROUND`). Een test controleert dat de SVG's in `exports/` overeenkomen met wat de generator nu maakt: pas je `core.ts` aan, draai dan `npm run export`.
+
+![alle toestanden](exports/docs/states.png)
+
 ## Andere platforms
 
 | Platform | Aanpak |
