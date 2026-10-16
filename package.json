@@ -13,7 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts && vitest run",
-    "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && esbuild src/advice-index.ts --bundle --format=esm --minify --outfile=dist/advice.js && tsc -p tsconfig.build.json && node scripts/make-demo.mjs",
+    "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && esbuild src/advice-index.ts --bundle --format=esm --minify --outfile=dist/advice.js && esbuild src/spotify/index.ts --bundle --format=esm --minify --outfile=dist/spotify.js && tsc -p tsconfig.build.json && node scripts/make-demo.mjs",
     "demo": "node scripts/make-demo.mjs",
     "export": "tsx scripts/export-static.ts",
     "swift:reference": "tsx scripts/swift-reference.ts",
@@ -55,6 +55,10 @@
     "./advice": {
       "types": "./dist/advice-index.d.ts",
       "import": "./dist/advice.js"
+    },
+    "./spotify": {
+      "types": "./dist/spotify/index.d.ts",
+      "import": "./dist/spotify.js"
     }
   },
   "peerDependencies": {

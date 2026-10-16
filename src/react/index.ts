@@ -3,3 +3,8 @@ export type { DashyProps } from './Dashy';
 export { useStateDriver } from './useStateDriver';
 export { useRemoteDashy } from './useRemoteDashy';
 export type { RemoteOptions } from './useRemoteDashy';
+export { NowPlayingBlock } from './NowPlayingBlock';
+export type { NowPlayingBlockProps } from './NowPlayingBlock';
+export type { SpotifyStatus } from '../spotify/session';
+export { useSpotify } from './useSpotify';
+export type { UseSpotifyOptions } from './useSpotify';
