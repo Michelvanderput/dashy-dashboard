@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the Dashy window may do: listen to events, and be dragged by its handle.",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-start-dragging"]
+  "description": "What the Dashy windows may do: listen to events, call the app's own commands, and (the buddy) be dragged by its handle.",
+  "windows": [
+    "main",
+    "player"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging"
+  ]
 }

@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { adoptPastedLink, forgetTasksConnection, mountDashy, nowTask, type DashyHandle } from '../src';
+import { musicState } from '../src/spotify/model';
 import { useDashyTasks } from '../src/react';
 import { initialConnection, store } from './storage';
 
@@ -17,13 +18,16 @@ export function Buddy() {
   const tasks = useDashyTasks({ url: conn?.url, token: conn?.token, actionUrl: conn?.actionUrl, actionToken: conn?.actionToken });
   const host = useRef<HTMLDivElement>(null), handle = useRef<DashyHandle | null>(null);
   const [bad, setBad] = useState(false);
+  const [record, setRecord] = useState(false); // a record is really playing on the turntable
 
   useEffect(() => {
     const h = mountDashy(host.current!, { initialState: 'idle', ambient: 1.3, perspective: 1.5 });
     handle.current = h;
     return () => { h.destroy(); handle.current = null; };
   }, []);
-  useEffect(() => { const h = handle.current; if (h && h.getState() !== tasks.state) h.setState(tasks.state); }, [tasks.state]);
+  // facts beat feelings: he dances to the record only when nothing urgent is going on (same rule as for Spotify)
+  const shown = musicState({ state: tasks.state, rule: tasks.rule }, record);
+  useEffect(() => { const h = handle.current; if (h && h.getState() !== shown) h.setState(shown); }, [shown]);
 
   // the global cursor and the menu bar's "Koppeling wissen", from the Rust side
   useEffect(() => {
@@ -32,7 +36,8 @@ export function Buddy() {
     void import('@tauri-apps/api/event').then(async ({ listen }) => {
       const a = await listen<{ nx: number; ny: number }>('cursor', e => handle.current?.look(e.payload.nx, e.payload.ny));
       const b = await listen('unlink', () => { forgetTasksConnection(store); setConn(null); });
-      if (gone) { a(); b(); } else off = [a, b];
+      const c = await listen<{ playing: boolean }>('turntable', e => setRecord(e.payload.playing));
+      if (gone) { a(); b(); c(); } else off = [a, b, c];
     });
     return () => { gone = true; off.forEach(f => f()); };
   }, []);
@@ -45,7 +50,7 @@ export function Buddy() {
       {/* the strip under him: grab it to move him; it also shows what is up now */}
       {conn ? (
         <div data-tauri-drag-region style={strip}>
-          <span data-tauri-drag-region style={task ? pill : grip} title={task?.title}>{task ? task.title : ''}</span>
+          <span data-tauri-drag-region style={record || task ? pill : grip} title={record ? 'Platenspeler' : task?.title}>{record ? '♪ Platenspeler' : task ? task.title : ''}</span>
         </div>
       ) : (
         <div data-tauri-drag-region style={strip}>

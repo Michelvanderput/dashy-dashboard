@@ -109,7 +109,7 @@ const CSS = `
 `;
 
 /** Label with printed text on a circle, so the rotation is visible, and a dark disc with grooves. */
-function Grooves({ id }: { id: string }) {
+export function Grooves({ id }: { id: string }) {
   const rings: ReactElement[] = [];
   for (let r = 38; r <= 94; r += 2.6) rings.push(<circle key={r} r={r} fill="none" stroke="#000" strokeOpacity={r % 3 < 1 ? 0.28 : 0.14} strokeWidth="0.6" />);
   return (

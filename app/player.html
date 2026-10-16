@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Platenspeler</title>
+  <style>
+    :root{--bg:#f5f4f0;--card:#fff;--ink:#17181a;--mute:rgba(23,24,26,.62);--line:rgba(23,24,26,.14);--accent:#7c3aed}
+    @media (prefers-color-scheme:dark){:root{--bg:#161618;--card:#1f2023;--ink:#eeece8;--mute:rgba(238,236,232,.62);--line:rgba(255,255,255,.14)}}
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,sans-serif}
+    button,select,input{font:inherit;color:inherit}
+    button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./player.tsx"></script>
+</body>
+</html>
