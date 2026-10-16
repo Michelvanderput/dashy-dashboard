@@ -81,6 +81,36 @@ const { state, line } = mergeAdvice(driverResolution, advice);   // de driver wi
 - **Taken en agenda zijn gegevens, geen instructies:** ze gaan begrensd (40 taken, 20 afspraken, 80 tekens per titel) en schoongemaakt in een `<data>`-blok naar het model.
 - **Privacy:** titels en tijden van je taken en afspraken gaan naar Anthropic. Stuur geen details mee die je daar niet wilt hebben.
 
+## Dashy bedienen via Claude (MCP)
+
+Claude roept jouw app aan, niet andersom: een remote MCP-server op Vercel (`api/mcp.ts`, Streamable HTTP, zonder sessies) schrijft naar één document in Upstash Redis. De app haalt de toestand op via `api/dashy-state.ts`.
+
+| Tool | Doet |
+|---|---|
+| `dashy_task` | `added` (met optionele deadline), `done` (Dashy viert), `removed`, `due` (deadline wijzigen of wissen). Alleen een zelfgekozen id, nooit de titel. |
+| `dashy_flag` | `waiting`, `blocked`, `break` (slaperig), `working` aan of uit |
+| `dashy_activity` | "er is iets gedaan": houdt Dashy uit `sad` |
+| `dashy_mood` | stemming + één zin (max 100 tekens), verloopt na 30 minuten, `clear: true` haalt weg |
+
+De prioriteiten van de driver blijven gelden: Claudes stemming verschijnt alleen als Dashy niets urgents heeft (geen deadline, blokkade, wachten, pauze of viering). Elk toolresultaat zegt wat Dashy nu toont en waarom, ook als de stemming wordt verborgen.
+
+```bash
+# Claude Code
+claude mcp add --transport http dashy https://<jouw-app>.vercel.app/api/mcp --header "Authorization: Bearer <DASHY_MCP_TOKEN>"
+```
+
+In de app:
+
+```tsx
+import { Dashy, useRemoteDashy } from 'dashy-avatar/react';
+const { state, line } = useRemoteDashy({ url: '/api/dashy-state', token: STATE_TOKEN });
+<Dashy state={state} />
+```
+
+- **Twee geheimen:** `DASHY_MCP_TOKEN` (Claude, schrijven) en `DASHY_STATE_TOKEN` (app, alleen lezen). Het ene werkt niet op het andere eindpunt. Het token kan ook als `?key=` in de URL, voor connectors zonder headers. URL's komen in logs, dus gebruik de header waar het kan.
+- **Zonder Redis of token** doet niets iets: de eindpunten geven 503 en een rustige Dashy.
+- **Twee schrijfacties binnen enkele milliseconden** kunnen elkaar overschrijven (laatste wint). Voor één persoon met één Claude is dat acceptabel.
+
 ## Andere platforms
 
 | Platform | Aanpak |

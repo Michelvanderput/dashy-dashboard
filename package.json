@@ -22,6 +22,7 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.81",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^26.6.5",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",

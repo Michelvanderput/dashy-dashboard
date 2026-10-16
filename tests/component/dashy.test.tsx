@@ -162,3 +162,33 @@ describe('small variant', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('useRemoteDashy', () => {
+  const body = (o: object) => JSON.stringify({ state: 'idle', line: '', source: 'driver', nextWakeAt: null, rev: 1, ...o });
+  it('polls, follows the server, asks sooner for nextWakeAt, and cleans up', async () => {
+    const { useRemoteDashy } = await import('../../src/react');
+    vi.useFakeTimers(); vi.setSystemTime(1_000_000);
+    const answers = [body({}), body({ state: 'strict', nextWakeAt: 1_000_000 + 3000 }), body({ state: 'happy', line: 'Hoi', source: 'claude' })];
+    const seen: number[] = []; let i = 0;
+    const f = (async () => { seen.push(Date.now()); return new Response(answers[Math.min(i++, answers.length - 1)]); }) as unknown as typeof fetch;
+    const { result, unmount } = renderHook(() => useRemoteDashy({ url: 'http://x', token: 't', intervalMs: 60_000, fetch: f }));
+    expect(result.current.state).toBe('idle');
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.state).toBe('idle'); expect(i).toBe(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(result.current.state).toBe('strict');
+    await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
+    expect(result.current).toMatchObject({ state: 'happy', line: 'Hoi', source: 'claude' });
+    expect(seen[2] - seen[1]).toBeLessThan(5000); // woke up at nextWakeAt, not after 60 s
+    const n = i; unmount(); await vi.advanceTimersByTimeAsync(120_000);
+    expect(i).toBe(n); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('stays calm when the server is down', async () => {
+    const { useRemoteDashy } = await import('../../src/react');
+    vi.useFakeTimers();
+    const f = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+    const { result } = renderHook(() => useRemoteDashy({ url: 'http://x', token: 't', fetch: f }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(result.current).toMatchObject({ state: 'idle', line: '', source: 'fallback' });
+  });
+});

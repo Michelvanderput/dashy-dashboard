@@ -32,7 +32,7 @@ export interface AdviceInput {
 
 export const LIMITS = { tasks: 40, agenda: 20, text: 80 } as const;
 
-const oneLine = (s: unknown, max: number) =>
+export const oneLine = (s: unknown, max: number) =>
   String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Clean and cap the input before it goes anywhere: titles are data, never instructions. */
