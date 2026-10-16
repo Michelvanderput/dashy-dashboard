@@ -122,6 +122,13 @@ export const CSS = `
 .db-help:hover,.db-help:focus-visible{opacity:1;background:rgba(23,24,26,.06)}
 .db-help:focus-visible{outline:2px solid #17181a;outline-offset:-2px}
 
+.db-focused{margin:.3em 0 0;color:var(--muted);font-size:.9em}
+.db-flags{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.7em}
+.db-flags button{min-height:44px;padding:0 1em;border:1px solid var(--floor);border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:.9em;cursor:pointer;transition:background .3s,color .3s}
+.db-flags button[aria-pressed="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.db-flags button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+@container (max-height:220px){.db-flags,.db-focused{display:none}}
+
 /* Even stoppen */
 .db-urge{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;background:var(--bg);color:var(--ink)}
 .db-urge-in{width:min(30rem,100%);display:flex;flex-direction:column;align-items:center;gap:1.1em;text-align:center}

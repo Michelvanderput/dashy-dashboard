@@ -52,6 +52,10 @@ export type Action = {
     flag: 'waiting' | 'blocked' | 'break' | 'working';
     value: boolean;
 } | {
+    type: 'later';
+    id: string;
+    at: number;
+} | {
     type: 'music';
     playing: boolean;
 } | {

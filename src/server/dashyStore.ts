@@ -5,7 +5,8 @@
 import { ALLOWED_STATES, MAX_LINE, oneLine, type AllowedState } from '../advice';
 import type { DashyState } from '../core';
 import { nowTask, type NowPick, type PlanItem } from '../dashboard/plan';
-import { HABIT_LIMITS, setToday, type Habit } from '../dashboard/habits';
+import { HABIT_LIMITS, dayKey, setToday, type Habit } from '../dashboard/habits';
+import { laterMs, type Later } from '../dashboard/time';
 import { initialDriverState, nextWakeAt, reduce, resolve, type DriverEvent, type DriverState, type RuleName } from '../driver';
 
 export interface Mood { state: AllowedState; line: string; until: number }
@@ -17,9 +18,13 @@ export interface Doc {
   focusId: string | null;
   /** Habits (no streaks): see src/dashboard/habits.ts */
   habits: Record<string, Habit>;
+  /** minutes of focus sessions finished today (Dutch day); resets by itself on a new day */
+  focus: { day: string; minutes: number };
 }
-export const emptyDoc = (now: number): Doc => ({ rev: 0, driver: initialDriverState(now), mood: null, items: {}, focusId: null, habits: {} });
+export const emptyDoc = (now: number): Doc => ({ rev: 0, driver: initialDriverState(now), mood: null, items: {}, focusId: null, habits: {}, focus: { day: dayKey(now), minutes: 0 } });
 /** The plan as a list, for the screen. */
+/** Minutes of focus today (0 when the stored day is not today). */
+export const focusToday = (doc: Doc, now: number): number => (doc.focus.day === dayKey(now) ? doc.focus.minutes : 0);
 export const planOf = (doc: Doc): PlanItem[] => Object.values(doc.items);
 /** The one thing to do now, as the screen will show it (so Claude can see it too). */
 export const nowOf = (doc: Doc, now: number): NowPick | null => nowTask(planOf(doc), now, doc.focusId);
@@ -48,6 +53,10 @@ export type Call =
   | { tool: 'task'; action: 'added' | 'done' | 'removed' | 'due' | 'reopen'; id: string; due?: string | null; title?: string; note?: string }
   | { tool: 'appointment'; action: 'added' | 'removed'; id: string; title?: string; start?: string; end?: string | null; note?: string }
   | { tool: 'focus'; id: string | null }
+  /** a new moment for an open task */
+  | { tool: 'later'; id: string; until: Later }
+  /** a finished focus session */
+  | { tool: 'focused'; minutes: number }
   | { tool: 'habit'; action: 'added' | 'removed' | 'check' | 'uncheck'; id: string; title?: string; perWeek?: number; plan?: string }
   | { tool: 'flag'; flag: 'waiting' | 'blocked' | 'break' | 'working'; value: boolean }
   | { tool: 'activity' }
@@ -133,6 +142,16 @@ export function apply(doc: Doc, call: Call, now: number): Outcome {
       if (!it || it.done) return { ok: false, error: `no open item with id ${call.id}` };
       return { ok: true, doc: bump({ focusId: call.id }) };
     }
+    case 'later': {
+      if (!(call.id in doc.driver.tasks)) return { ok: false, error: `no open task with id ${call.id}` };
+      if (call.until !== 'plus30' && call.until !== 'tomorrow') return { ok: false, error: 'until must be plus30 or tomorrow' };
+      return apply(doc, { tool: 'task', action: 'due', id: call.id, due: new Date(laterMs(call.until, now)).toISOString() }, now);
+    }
+    case 'focused': {
+      if (!Number.isInteger(call.minutes) || call.minutes < 1 || call.minutes > 180) return { ok: false, error: 'minutes must be a whole number from 1 to 180' };
+      const day = dayKey(now), had = doc.focus.day === day ? doc.focus.minutes : 0;
+      return { ok: true, doc: bump({ focus: { day, minutes: Math.min(24 * 60, had + call.minutes) }, driver: reduce(doc.driver, { type: 'activity' }, now) }) };
+    }
     case 'habit': {
       if (!LIMITS.idPattern.test(call.id ?? '')) return { ok: false, error: 'id must be 1-64 characters: letters, digits, - and _' };
       const prev = doc.habits[call.id];
@@ -206,7 +225,9 @@ export function parseDoc(raw: unknown): Doc | null {
         habits[id] = h;
       }
     }
-    return { rev: d.rev, driver: d.driver, mood: d.mood ?? null, habits, items, focusId: typeof d.focusId === 'string' && items[d.focusId] ? d.focusId : null };
+    const f = d.focus as Doc['focus'] | undefined;
+    const focus = f && typeof f.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.day) && Number.isFinite(f.minutes) && f.minutes >= 0 && f.minutes <= 1440 ? { day: f.day, minutes: f.minutes } : { day: '', minutes: 0 };
+    return { rev: d.rev, driver: d.driver, mood: d.mood ?? null, habits, focus, items, focusId: typeof d.focusId === 'string' && items[d.focusId] ? d.focusId : null };
   } catch { return null; }
 }
 

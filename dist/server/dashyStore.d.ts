@@ -6,6 +6,7 @@ import { type AllowedState } from '../advice';
 import type { DashyState } from '../core';
 import { type NowPick, type PlanItem } from '../dashboard/plan';
 import { type Habit } from '../dashboard/habits';
+import { type Later } from '../dashboard/time';
 import { type DriverState, type RuleName } from '../driver';
 export interface Mood {
     state: AllowedState;
@@ -22,9 +23,16 @@ export interface Doc {
     focusId: string | null;
     /** Habits (no streaks): see src/dashboard/habits.ts */
     habits: Record<string, Habit>;
+    /** minutes of focus sessions finished today (Dutch day); resets by itself on a new day */
+    focus: {
+        day: string;
+        minutes: number;
+    };
 }
 export declare const emptyDoc: (now: number) => Doc;
 /** The plan as a list, for the screen. */
+/** Minutes of focus today (0 when the stored day is not today). */
+export declare const focusToday: (doc: Doc, now: number) => number;
 export declare const planOf: (doc: Doc) => PlanItem[];
 /** The one thing to do now, as the screen will show it (so Claude can see it too). */
 export declare const nowOf: (doc: Doc, now: number) => NowPick | null;
@@ -66,6 +74,17 @@ export type Call = {
 } | {
     tool: 'focus';
     id: string | null;
+}
+/** a new moment for an open task */
+ | {
+    tool: 'later';
+    id: string;
+    until: Later;
+}
+/** a finished focus session */
+ | {
+    tool: 'focused';
+    minutes: number;
 } | {
     tool: 'habit';
     action: 'added' | 'removed' | 'check' | 'uncheck';

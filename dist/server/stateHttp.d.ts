@@ -20,6 +20,12 @@ export interface StateBody {
     items: PlanItem[];
     focusId: string | null;
     habits: Habit[];
+    flags: {
+        break: boolean;
+        blocked: boolean;
+        waiting: boolean;
+    };
+    focusedMinutes: number;
 }
 /** What the screen needs from the document: the state to show, and the plan. */
 export declare function buildStateBody(doc: Doc, now: number): StateBody;

@@ -12,10 +12,10 @@ export interface ActionHttpDeps {
 }
 
 const MAX_BODY = 1000;
-const calm = (at: number) => ({ state: 'idle', line: '', source: 'fallback' as const, rule: 'idle', nextWakeAt: null, rev: 0, at, items: [], focusId: null, habits: [] });
+const calm = (at: number) => ({ state: 'idle', line: '', source: 'fallback' as const, rule: 'idle', nextWakeAt: null, rev: 0, at, items: [], focusId: null, habits: [], flags: { break: false, blocked: false, waiting: false }, focusedMinutes: 0 });
 
-/** What the screen may do, and nothing more: check a task off or back, add a task (title only), choose the task to do first, check a habit today. */
-function toCall(b: { action?: unknown; id?: unknown; title?: unknown } | null, now: number): Call | null {
+/** What the screen may do, and nothing more: check a task off or back, add a task (title only), choose the task to do first, move a task to later, check a habit today, report finished focus minutes, set break / stuck / waiting. */
+function toCall(b: { action?: unknown; id?: unknown; title?: unknown; until?: unknown; minutes?: unknown; flag?: unknown; value?: unknown } | null, now: number): Call | null {
   if (typeof b !== 'object' || b === null) return null;
   const id = typeof b.id === 'string' ? b.id : null;
   switch (b.action) {
@@ -27,6 +27,9 @@ function toCall(b: { action?: unknown; id?: unknown; title?: unknown } | null, n
       if (typeof b.title !== 'string' || !b.title.trim()) return null;
       return { tool: 'task', action: 'added', id: `s${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: b.title, due: null };
     }
+    case 'later': return id && (b.until === 'plus30' || b.until === 'tomorrow') ? { tool: 'later', id, until: b.until } : null;
+    case 'focused': return typeof b.minutes === 'number' ? { tool: 'focused', minutes: b.minutes } : null;
+    case 'flag': return (b.flag === 'break' || b.flag === 'blocked' || b.flag === 'waiting') && typeof b.value === 'boolean' ? { tool: 'flag', flag: b.flag, value: b.value } : null;
     default: return null;
   }
 }
@@ -41,7 +44,7 @@ export async function handleActionRequest(req: Request, deps: ActionHttpDeps): P
   let allowed = false;
   try { allowed = await deps.allow(`action:${fingerprint(tokenFrom(req))}`); } catch (e) { log(`rate limiter failed: ${String(e)}`); }
   if (!allowed) return reply(429, calm(now), 'rate-limited');
-  let body: { action?: unknown; id?: unknown; title?: unknown };
+  let body: { action?: unknown; id?: unknown; title?: unknown; until?: unknown; minutes?: unknown; flag?: unknown; value?: unknown };
   try {
     const text = await req.text();
     if (text.length > MAX_BODY) return reply(413, calm(now), 'too-large');

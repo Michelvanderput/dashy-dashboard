@@ -350,4 +350,52 @@ describe('a phone on the charger, and a real day', () => {
     render(<Dashboard {...base({ showUrge: false })} />);
     expect(screen.queryByLabelText('Nieuwe taak')).toBeNull(); expect(screen.queryByRole('button', { name: /^Begin/ })).toBeNull(); expect(screen.queryByRole('button', { name: 'Even stoppen' })).toBeNull();
   });
+
+  it('"Later" offers a new moment for the Nu task: in 30 minutes or tomorrow', () => {
+    const onSnooze = vi.fn();
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Bellen', at: null }];
+    render(<Dashboard {...base({ items: items2, onSnooze })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Bellen: later' }));
+    fireEvent.click(screen.getByRole('button', { name: '+30 min' })); expect(onSnooze).toHaveBeenCalledWith('a', 'plus30');
+    expect(screen.queryByRole('button', { name: 'Morgen' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Bellen: later' })); fireEvent.click(screen.getByRole('button', { name: 'Morgen' }));
+    expect(onSnooze).toHaveBeenLastCalledWith('a', 'tomorrow');
+  });
+
+  it('Pauze and "Ik zit vast" show the real state and switch it; focus minutes show only when there are some', () => {
+    const onFlag = vi.fn();
+    const { container, rerender } = render(<Dashboard {...base({ flags: { break: false, blocked: false, waiting: false }, onFlag })} />);
+    expect(container.querySelector('.db-focused')).toBeNull();
+    const pause = screen.getByRole('button', { name: 'Pauze' }); expect(pause.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(pause); expect(onFlag).toHaveBeenCalledWith('break', true);
+    rerender(<Dashboard {...base({ flags: { break: true, blocked: true, waiting: false }, onFlag, focusedMinutes: 35 })} />);
+    expect(screen.getByRole('button', { name: 'Pauze' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Ik zit vast' })); expect(onFlag).toHaveBeenLastCalledWith('blocked', false);
+    expect(container.querySelector('.db-focused')!.textContent).toBe('Gefocust: 35 min');
+  });
+
+  it('keyboard shortcuts work on the page, never while typing, and never with a modifier', () => {
+    const onStartSession = vi.fn(), onToggleDone = vi.fn(), onFlag = vi.fn(), onAdd = vi.fn(), onSnooze = vi.fn();
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Bellen', at: null }];
+    const { container } = render(<Dashboard {...base({ items: items2, onStartSession, onToggleDone, onFlag, onAdd, onSnooze, flags: { break: false, blocked: false, waiting: false } })} />);
+    const main = root(container);
+    fireEvent.keyDown(main, { key: 'b' }); expect(onStartSession).toHaveBeenCalledWith({ id: 'a', title: 'Bellen' });
+    fireEvent.keyDown(main, { key: 'k' }); expect(onToggleDone).toHaveBeenCalledWith('a', true);
+    fireEvent.keyDown(main, { key: 'p' }); expect(onFlag).toHaveBeenCalledWith('break', true);
+    fireEvent.keyDown(main, { key: 'l' }); expect(screen.getByRole('button', { name: '+30 min' })).toBeTruthy();
+    fireEvent.keyDown(main, { key: 'n' }); expect(document.activeElement).toBe(screen.getByLabelText('Nieuwe taak'));
+    onFlag.mockClear(); onToggleDone.mockClear();
+    fireEvent.keyDown(screen.getByLabelText('Nieuwe taak'), { key: 'k' }); fireEvent.keyDown(screen.getByLabelText('Nieuwe taak'), { key: 'p' });
+    fireEvent.keyDown(main, { key: 'k', ctrlKey: true }); fireEvent.keyDown(main, { key: 'p', metaKey: true });
+    expect(onToggleDone).not.toHaveBeenCalled(); expect(onFlag).not.toHaveBeenCalled();
+    fireEvent.keyDown(main, { key: 's' }); expect(screen.getByRole('dialog', { name: 'Even stoppen' })).toBeTruthy();
+    fireEvent.keyDown(main, { key: 'p' }); expect(onFlag).not.toHaveBeenCalled(); // not while the sheet is open
+  });
+
+  it('good morning only when nothing is urgent', () => {
+    const morning = Date.parse('2026-10-16T08:00:00+02:00');
+    const items2: PlanItem[] = [{ id: 'a', kind: 'task', title: 'Offerte', at: null }];
+    const { container } = render(<Dashboard {...base({ now: morning, items: items2 })} />);
+    expect(container.querySelector('.db-line')!.textContent).toBe('Goedemorgen. Eerst: Offerte.');
+  });
 });

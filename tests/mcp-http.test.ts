@@ -117,7 +117,7 @@ test('state endpoint: the app sees what Claude and the driver decided, with a re
   const s = await fetchDashyState({ url: 'http://x/api/dashy-state', token: STATE, fetch: stateFetch });
   assert.deepEqual([s.state, s.line, s.source], ['dancing', 'Feest!', 'claude']);
   assert.equal(s.nextWakeAt, clock + 30 * 60_000);
-  assert.deepEqual(await fetchDashyState({ url: 'http://x/api/dashy-state', token: MCP, fetch: stateFetch }), { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [] }, 'the MCP token is not accepted here either');
+  assert.deepEqual(await fetchDashyState({ url: 'http://x/api/dashy-state', token: MCP, fetch: stateFetch }), { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [], flags: { break: false, blocked: false, waiting: false }, focusedMinutes: 0 }, 'the MCP token is not accepted here either');
   await c.close();
 });
 
@@ -137,13 +137,13 @@ test('state endpoint failures all answer with a valid calm body and the right st
 });
 
 test('client never throws or hangs: bad status, bad body, wrong values, network error, no answer', async () => {
-  const calm = { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [] };
+  const calm = { state: 'idle', line: '', source: 'fallback', nextWakeAt: null, rev: 0, items: [], focusId: null, habits: [], flags: { break: false, blocked: false, waiting: false }, focusedMinutes: 0 };
   const resp = (b: string, status = 200) => async () => new Response(b, { status });
   const good = { state: 'happy', line: 'x', source: 'claude', nextWakeAt: null, rev: 3 };
   for (const f of [async () => { throw new TypeError('x'); }, resp(JSON.stringify(good), 500), resp('<html>'), resp('null'), resp(JSON.stringify({ ...good, state: 'banana' })),
     resp(JSON.stringify({ ...good, line: 'x'.repeat(101) })), resp(JSON.stringify({ ...good, source: 'hacked' })), resp(JSON.stringify({ ...good, nextWakeAt: 'soon' })), () => new Promise<Response>(() => {})])
     assert.deepEqual(await fetchDashyState({ url: 'http://x', token: 't', timeoutMs: 50, fetch: f as never }), calm);
-  assert.deepEqual(await fetchDashyState({ url: 'http://x', token: 't', fetch: resp(JSON.stringify({ ...good, extra: 'ignored' })) as never }), { ...good, items: [], focusId: null, habits: [] });
+  assert.deepEqual(await fetchDashyState({ url: 'http://x', token: 't', fetch: resp(JSON.stringify({ ...good, extra: 'ignored' })) as never }), { ...good, items: [], focusId: null, habits: [], flags: { break: false, blocked: false, waiting: false }, focusedMinutes: 0 });
 });
 
 test('emptyDoc is exported for tests only: a calm start', () => assert.equal(view(emptyDoc(clock), clock).state, 'idle'));

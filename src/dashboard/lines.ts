@@ -14,6 +14,8 @@ export interface LineContext {
   /** an open task that is past its deadline for a while: still open, never blamed */
   stale?: string;
   music?: string;
+  /** Dutch part of the day; only changes what Dashy says when nothing urgent is going on */
+  part?: 'morning' | 'day' | 'evening';
 }
 
 export function dashyLine(res: Resolution, c: LineContext = {}): string {
@@ -31,6 +33,6 @@ export function dashyLine(res: Resolution, c: LineContext = {}): string {
     case 'break': return 'Pauze. Rustig aan.';
     case 'working': return 'Lekker bezig. Houd vast.';
     case 'quiet': return c.stale ? `${c.stale} staat nog open. Zullen we een nieuw moment kiezen?` : 'Het is stil. Begin klein: tien minuten is genoeg.';
-    case 'idle': return c.music ? `Ik hoor ${c.music}.` : c.nowTitle ? `Nu: ${c.nowTitle}.` : c.habit ? (c.habit.plan ? `${c.habit.plan}` : `Een kleine ${c.habit.title.toLowerCase()} vandaag?`) : c.nextTitle ? `Straks: ${c.nextTitle}${c.nextIn ? ` (over ${c.nextIn})` : ''}.` : 'Alles rustig.';
+    case 'idle': return c.music ? `Ik hoor ${c.music}.` : c.part === 'morning' ? (c.nowTitle ? `Goedemorgen. Eerst: ${c.nowTitle}.` : 'Goedemorgen. Wat is vandaag het ene ding?') : c.part === 'evening' ? 'Rustige avond. Wat open staat, wacht tot morgen.' : c.nowTitle ? `Nu: ${c.nowTitle}.` : c.habit ? (c.habit.plan ? `${c.habit.plan}` : `Een kleine ${c.habit.title.toLowerCase()} vandaag?`) : c.nextTitle ? `Straks: ${c.nextTitle}${c.nextIn ? ` (over ${c.nextIn})` : ''}.` : 'Alles rustig.';
   }
 }

@@ -21,5 +21,7 @@ export interface LineContext {
     /** an open task that is past its deadline for a while: still open, never blamed */
     stale?: string;
     music?: string;
+    /** Dutch part of the day; only changes what Dashy says when nothing urgent is going on */
+    part?: 'morning' | 'day' | 'evening';
 }
 export declare function dashyLine(res: Resolution, c?: LineContext): string;

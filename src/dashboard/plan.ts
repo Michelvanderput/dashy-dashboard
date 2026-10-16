@@ -63,6 +63,7 @@ export type Action =
   | { type: 'done'; id: string }
   | { type: 'undo'; id: string }
   | { type: 'flag'; flag: 'waiting' | 'blocked' | 'break' | 'working'; value: boolean }
+  | { type: 'later'; id: string; at: number }
   | { type: 'music'; playing: boolean }
   | { type: 'reset'; items: PlanItem[] };
 
@@ -89,6 +90,11 @@ export function reducer(m: Model, a: Action, now: number): Model {
       if (!it || !it.done) return m;
       // reopening a task puts its deadline back with the driver
       return { ...m, items: m.items.map(i => (i.id === a.id ? { ...i, done: false } : i)), driver: { ...m.driver, tasks: { ...m.driver.tasks, [a.id]: it.at }, lastActivityAt: now } };
+    }
+    case 'later': {
+      const it = m.items.find(i => i.id === a.id);
+      if (!it || it.done || it.kind !== 'task') return m;
+      return { ...m, items: m.items.map(i => (i.id === a.id ? { ...i, at: a.at } : i)), driver: reduce(m.driver, { type: 'taskDueChanged', id: a.id, dueAt: a.at }, now) };
     }
     case 'flag': return { ...m, driver: reduce(m.driver, { type: a.flag, value: a.value } as never, now) };
     case 'music': return a.playing === (m.musicSince !== null) ? m : { ...m, musicSince: a.playing ? now : null, driver: a.playing ? reduce(m.driver, { type: 'activity' }, now) : m.driver };

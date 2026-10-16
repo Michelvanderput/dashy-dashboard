@@ -118,6 +118,10 @@ Zie `docs/RESEARCH.md` voor onderzoek, bronnen en wat het bewijs wel en niet zeg
 - **Gewoontes** zonder streaks, met als-dan-plan, in het blok Planning. Afvinken kan op het scherm (met het actie-token), Claude zet ze op.
 - **Snel toevoegen** in Planning (alleen een titel; Claude kan er later een tijd aan hangen).
 - **Even stoppen** (knop bij Dashy): 10 minuten uitstel, ademcirkel, een andere activiteit. Geen vragen, geen teller. Hoe het afliep blijft alleen op het apparaat. Geen medische hulp.
+- **Later:** een open taak naar over 30 minuten of morgen 09:00 (Nederlandse tijd) verplaatsen, in plaats van een schuldgevoel.
+- **Pauze** en **Ik zit vast** op het scherm (Dashy wordt slaperig of vraagt hulp). **Gefocust: x min** telt de afgeronde sessies van vandaag, en begint morgen weer op nul.
+- Dashy zegt 's ochtends (5 tot 10 u) "Goedemorgen. Eerst: …" en 's avonds (vanaf 21 u) "Rustige avond. Wat open staat, wacht tot morgen." zolang er niets urgents is.
+- **Sneltoetsen (desktop):** `n` nieuwe taak, `b` begin, `k` klaar, `l` later, `p` pauze, `s` even stoppen, `Esc` sluiten. Ze werken niet tijdens het typen of met Ctrl/Cmd.
 - Het actie-eindpunt kan alleen: taak afvinken/terugzetten, taak toevoegen (titel), taak kiezen, gewoonte van vandaag afvinken. Niets anders.
 
 ## Spotify-blok

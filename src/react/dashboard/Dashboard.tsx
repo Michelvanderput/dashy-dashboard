@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { chooseAttention } from '../../dashboard/attention';
 import { aimAt } from '../../dashboard/aim';
 import { BLOCKS, tracksFor, type BlockId } from '../../dashboard/layout';
@@ -7,6 +7,7 @@ import { doneToday, habitToNudge, weekCount, type Habit } from '../../dashboard/
 import { isOver, remainingMs, timerLabel, timerSpoken, MORE_MINUTES, SESSION_MINUTES, type Session } from '../../dashboard/session';
 import type { UrgeOutcome } from '../../dashboard/urge';
 import { UrgeSheet } from './UrgeSheet';
+import { partOfDay, type Later } from '../../dashboard/time';
 import { clock, countdown, nextAppointmentAt, nextUp, nowTask, planOrder, pressingTask, urgency, type PlanItem } from '../../dashboard/plan';
 import type { DashyState } from '../../core';
 import type { Resolution } from '../../driver';
@@ -44,6 +45,13 @@ export interface DashboardProps {
   /** "Even stoppen" sheet. Called when it closes, with how it ended (never with content). Default: the button is shown. */
   onUrge?: (outcome: UrgeOutcome) => void;
   showUrge?: boolean;
+  /** Move an open task to a new moment ("Later"). Without it there is no Later button. */
+  onSnooze?: (id: string, until: Later) => void;
+  /** Pause / stuck / waiting as the server knows them, and a way to switch them. */
+  flags?: { break: boolean; blocked: boolean; waiting: boolean };
+  onFlag?: (flag: 'break' | 'blocked' | 'waiting', value: boolean) => void;
+  /** Minutes of finished focus sessions today. */
+  focusedMinutes?: number;
   /** Text for an empty planning. Default: "Een lege dag. Voeg iets kleins toe." */
   emptyText?: string;
   /** Dark and dimmed (for the night, a phone on the charger). */
@@ -114,7 +122,7 @@ function Block({ id, focus, attn, onToggle, children }: { id: BlockId; focus: bo
  * (a deadline, an appointment, Dashy asking for help, new music) the grid tracks grow so that block takes about half the
  * screen, animated by the browser itself; the content simply reflows. Tap a block's button to grow it yourself (Esc lets go).
  */
-export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, session = null, onStartSession, onSessionEnd, habits = [], onHabit, onAdd, onUrge, showUrge = true, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
+export function Dashboard({ now, items, resolution, state, line, music, onToggleDone, focusTaskId, session = null, onStartSession, onSessionEnd, habits = [], onHabit, onAdd, onUrge, showUrge = true, onSnooze, flags, onFlag, focusedMinutes = 0, emptyText = 'Een lege dag. Voeg iets kleins toe.', night = false, keepAwake = false, workday = { startHour: 8, endHour: 18 }, onFocusChange, className, style }: DashboardProps) {
   const root = useRef<HTMLElement>(null);
   const orientation = useOrientation(root);
 
@@ -150,11 +158,12 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   const sessionOn = !!session && calm;
   const sessionOver = !!session && isOver(session, now);
   const dashyState = state ?? (sessionOn ? 'working' : musicState(resolution, playing));
-  const [urgeOpen, setUrgeOpen] = useState(false);
+  const [urgeOpen, setUrgeOpen] = useState(false), [laterOpen, setLaterOpen] = useState(false);
   const nudge = habitToNudge(habits, now);
   const press = pressingTask(items, now);
   const dashyText = line ?? (sessionOn ? (sessionOver ? `Tijd om. ${session!.title}: klaar, of nog ${MORE_MINUTES} minuten?` : 'Ik werk met je mee.') : null) ?? dashyLine(resolution, {
     task: press ? { title: press.title, in: countdown(press.at! - now), overdue: press.at! < now - 60_000, at: clock(press.at!) } : undefined,
+    part: partOfDay(now),
     habit: nudge ? { title: nudge.title, plan: nudge.plan } : undefined,
     nowTitle: pick?.item.title, nextTitle: next?.item.title, nextIn, stale: late?.title, music: playing ? np!.title : undefined,
   });
@@ -166,12 +175,29 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
   // Dashy looks at what needs attention (or at the music he is dancing to)
   const lookAt: BlockId | null = focus.block && focus.block !== 'dashy' ? focus.block : playing ? 'music' : null;
 
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') release(); };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { release(); setLaterOpen(false); return; }
+    // Keyboard shortcuts for desktop: n = new task, b = begin, k = klaar, l = later, p = pauze, s = even stoppen
+    const el = e.target as HTMLElement;
+    if (e.ctrlKey || e.metaKey || e.altKey || urgeOpen || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable) return;
+    const task = pick?.item.kind === 'task' ? pick.item : null;
+    switch (e.key.toLowerCase()) {
+      case 'n': if (onAdd) { e.preventDefault(); root.current?.querySelector<HTMLInputElement>('.db-add input')?.focus(); } break;
+      case 'b': if (task && onStartSession && !session) onStartSession({ id: task.id, title: task.title }); break;
+      case 'k': if (task && onToggleDone) { onToggleDone(task.id, true); if (session?.taskId === task.id) onSessionEnd?.('done'); } break;
+      case 'l': if (task && onSnooze) setLaterOpen(o => !o); break;
+      case 'p': if (onFlag && flags) onFlag('break', !flags.break); break;
+      case 's': if (showUrge) setUrgeOpen(true); break;
+    }
+  };
+  // on the document, so the shortcuts also work when nothing on the page has focus
+  const onKeyRef = useRef(onKey); onKeyRef.current = onKey;
+  useEffect(() => { const h = (e: KeyboardEvent) => onKeyRef.current(e); document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h); }, []);
   const attn = (b: BlockId) => focus.block === b && !focus.pinned;
   const big = next ? (() => { const m = Math.round((next.at - now) / 60_000); return m >= 60 ? { n: `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`, u: 'u' } : m < 1 ? { n: 'nu', u: '' } : { n: String(Math.max(0, m)), u: 'min' }; })() : null;
 
   return (
-    <main ref={root} className={`db${className ? ' ' + className : ''}`} aria-label="Dashy" onKeyDown={onKey} data-orientation={orientation} data-focus={focus.block ?? 'none'} data-night={night} data-theme={night ? 'dark' : undefined}
+    <main ref={root} className={`db${className ? ' ' + className : ''}`} aria-label="Dashy" data-orientation={orientation} data-focus={focus.block ?? 'none'} data-night={night} data-theme={night ? 'dark' : undefined}
       style={{ ['--areas' as string]: t.areas, ['--cols' as string]: t.cols, ['--rows' as string]: t.rows, ...style }}>
       <style>{CSS}</style>
       <h1 className="db-sr">Dashy: je dag in één oogopslag</h1>
@@ -196,10 +222,16 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
                       <button type="button" className="db-done ghost" onClick={() => onSessionEnd?.('stop')}>Stop</button>
                     </div>
                   </>
+                ) : pick.item.kind === 'task' && laterOpen ? (
+                  <div className="db-actions" role="group" aria-label={`${pick.item.title}: nieuw moment`}>
+                    <button type="button" className="db-done ghost" onClick={() => { onSnooze?.(pick.item.id, 'plus30'); setLaterOpen(false); }}>+30 min</button>
+                    <button type="button" className="db-done ghost" onClick={() => { onSnooze?.(pick.item.id, 'tomorrow'); setLaterOpen(false); }}>Morgen</button>
+                  </div>
                 ) : pick.item.kind === 'task' && (
                   <div className="db-actions">
                     {onStartSession && <button type="button" className="db-done" onClick={() => onStartSession({ id: pick.item.id, title: pick.item.title })} aria-label={`Begin ${SESSION_MINUTES} minuten aan ${pick.item.title}`}>Begin ({SESSION_MINUTES} min)</button>}
                     {onToggleDone && <button type="button" className={onStartSession ? 'db-done ghost' : 'db-done'} onClick={() => onToggleDone(pick.item.id, true)} aria-label={`${pick.item.title}: markeer als klaar`}>Klaar</button>}
+                    {onSnooze && <button type="button" className="db-done ghost" aria-expanded={false} onClick={() => setLaterOpen(true)} aria-label={`${pick.item.title}: later`}>Later</button>}
                   </div>
                 )}
                 {after && <p className="db-after">Straks: {clock(after.at)} · {after.item.title}</p>}
@@ -248,6 +280,13 @@ export function Dashboard({ now, items, resolution, state, line, music, onToggle
               <p className="db-date">{dateFmt.format(now)}</p>
               <div className="db-day" aria-hidden="true"><i style={{ transform: `scaleX(${done})` }} /></div>
               <p className="db-left">{left > 0 ? `Nog ${countdown(left * 60_000)} van de werkdag` : 'De werkdag zit erop.'}</p>
+              {focusedMinutes > 0 && <p className="db-focused">Gefocust: {focusedMinutes} min</p>}
+              {onFlag && flags && (
+                <div className="db-flags" role="group" aria-label="Hoe gaat het?">
+                  <button type="button" aria-pressed={flags.break} onClick={() => onFlag('break', !flags.break)}>Pauze</button>
+                  <button type="button" aria-pressed={flags.blocked} onClick={() => onFlag('blocked', !flags.blocked)}>Ik zit vast</button>
+                </div>
+              )}
             </div>
           )}
         </Block>

@@ -87,3 +87,70 @@ test('state body carries habits and the client validates them strictly', () => {
   assert.deepEqual(parseRemoteState({ state: 'idle', line: '', source: 'driver', nextWakeAt: null }).habits, []);
   for (const habits of [[{ id: 'a', title: '', perWeek: 2, done: [] }], [{ id: 'a', title: 'A', perWeek: 0, done: [] }], [{ id: 'a', title: 'A', perWeek: 2, done: ['gisteren'] }], 'x']) assert.throws(() => parseRemoteState({ ...body, habits }));
 });
+
+import { hourIn, laterMs, partOfDay, zonedMs } from '../src/dashboard/time';
+import { dashyLine } from '../src/dashboard/lines';
+import { focusToday } from '../src/server/dashyStore';
+import { initialModel, reducer } from '../src/dashboard/plan';
+
+test('Dutch time helpers: summer and winter time, tomorrow 09:00, part of the day', () => {
+  assert.equal(zonedMs('2026-10-16', 9), Date.parse('2026-10-16T09:00:00+02:00'));
+  assert.equal(zonedMs('2026-11-02', 9), Date.parse('2026-11-02T09:00:00+01:00'), 'winter time');
+  assert.equal(zonedMs('2026-10-25', 9), Date.parse('2026-10-25T09:00:00+01:00'), 'the day the clocks go back');
+  assert.equal(laterMs('plus30', T0), T0 + 30 * MIN);
+  assert.equal(laterMs('tomorrow', T0), Date.parse('2026-10-17T09:00:00+02:00'));
+  assert.equal(laterMs('tomorrow', Date.parse('2026-10-16T23:50:00+02:00')), Date.parse('2026-10-17T09:00:00+02:00'));
+  assert.equal(laterMs('tomorrow', Date.parse('2026-10-24T20:00:00+02:00')), Date.parse('2026-10-25T09:00:00+01:00'));
+  assert.equal(hourIn(Date.parse('2026-10-16T23:30:00+02:00')), 23);
+  const at = (h: string) => partOfDay(Date.parse(`2026-10-16T${h}:00+02:00`));
+  assert.deepEqual([at('04:59'), at('05:00'), at('09:59'), at('10:00'), at('20:59'), at('21:00')], ['evening', 'morning', 'morning', 'day', 'day', 'evening']);
+});
+
+test('later: moves an open task (driver and list together); refuses unknown, finished or odd input', () => {
+  let d = ok(emptyDoc(T0), { tool: 'task', action: 'added', id: 'a', title: 'Bellen', due: new Date(T0 - 40 * MIN).toISOString() });
+  d = ok(d, { tool: 'later', id: 'a', until: 'plus30' }); assert.equal(d.items.a.at, T0 + 30 * MIN); assert.equal(d.driver.tasks.a, T0 + 30 * MIN);
+  d = ok(d, { tool: 'later', id: 'a', until: 'tomorrow' }); assert.equal(d.items.a.at, Date.parse('2026-10-17T09:00:00+02:00'));
+  assert.equal(apply(d, { tool: 'later', id: 'zzz', until: 'plus30' }, T0).ok, false);
+  assert.equal(apply(d, { tool: 'later', id: 'a', until: 'next-year' as never }, T0).ok, false);
+  assert.equal(apply(ok(d, { tool: 'task', action: 'done', id: 'a' }), { tool: 'later', id: 'a', until: 'plus30' }, T0).ok, false);
+});
+
+test('focused minutes add up per Dutch day, reset on a new day, and count as a sign of life', () => {
+  let d = ok(emptyDoc(T0), { tool: 'focused', minutes: 10 }, T0); d = ok(d, { tool: 'focused', minutes: 25 }, T0 + MIN);
+  assert.equal(focusToday(d, T0 + 2 * MIN), 35); assert.equal(d.driver.lastActivityAt, T0 + MIN);
+  assert.equal(focusToday(d, T0 + 24 * 60 * MIN), 0, 'tomorrow starts at zero');
+  d = ok(d, { tool: 'focused', minutes: 5 }, T0 + 24 * 60 * MIN); assert.equal(focusToday(d, T0 + 24 * 60 * MIN), 5);
+  for (const minutes of [0, -1, 1.5, 181, NaN]) assert.equal(apply(d, { tool: 'focused', minutes }, T0).ok, false, String(minutes));
+  assert.deepEqual(parseDoc({ rev: 1, driver: emptyDoc(T0).driver, mood: null })!.focus, { day: '', minutes: 0 });
+});
+
+test('action endpoint: later, focused and flag; state body reports flags and focus minutes', async () => {
+  const store = new MemoryStore(); store.doc = ok(emptyDoc(T0), { tool: 'task', action: 'added', id: 'a', title: 'Offerte', due: null });
+  let r = await act(store, { action: 'later', id: 'a', until: 'tomorrow' }); let b = parseRemoteState(await r.text());
+  assert.equal(b.items[0].at, Date.parse('2026-10-17T09:00:00+02:00'));
+  r = await act(store, { action: 'focused', minutes: 12 }); assert.equal(parseRemoteState(await r.text()).focusedMinutes, 12);
+  r = await act(store, { action: 'flag', flag: 'break', value: true }); b = parseRemoteState(await r.text()); assert.deepEqual(b.flags, { break: true, blocked: false, waiting: false }); assert.equal(b.state, 'sleepy');
+  r = await act(store, { action: 'flag', flag: 'break', value: false }); assert.equal(parseRemoteState(await r.text()).flags.break, false);
+  for (const body of [{ action: 'later', id: 'a', until: 'never' }, { action: 'later', until: 'plus30' }, { action: 'focused', minutes: '5' }, { action: 'flag', flag: 'working', value: true }, { action: 'flag', flag: 'break' }])
+    assert.equal((await act(store, body)).status, 400, JSON.stringify(body));
+  assert.equal((await act(store, { action: 'focused', minutes: 999 })).status, 409);
+  assert.throws(() => parseRemoteState({ state: 'idle', line: '', source: 'driver', nextWakeAt: null, flags: { break: 1 } }));
+  assert.throws(() => parseRemoteState({ state: 'idle', line: '', source: 'driver', nextWakeAt: null, focusedMinutes: -3 }));
+});
+
+test('demo reducer: later moves the task and the driver deadline together', () => {
+  const m = initialModel([{ id: 'a', kind: 'task', title: 'A', at: T0 + MIN }], T0);
+  const n = reducer(m, { type: 'later', id: 'a', at: T0 + 3 * 60 * MIN }, T0 + 5000);
+  assert.equal(n.items[0].at, T0 + 3 * 60 * MIN); assert.equal(n.driver.tasks.a, T0 + 3 * 60 * MIN);
+  assert.equal(reducer(m, { type: 'later', id: 'nope', at: 1 }, T0), m);
+});
+
+test('Dashy greets by part of the day only when nothing urgent is going on', () => {
+  const idle = { rule: 'idle', state: 'idle' } as const;
+  assert.equal(dashyLine(idle, { part: 'morning', nowTitle: 'Offerte' }), 'Goedemorgen. Eerst: Offerte.');
+  assert.equal(dashyLine(idle, { part: 'morning' }), 'Goedemorgen. Wat is vandaag het ene ding?');
+  assert.equal(dashyLine(idle, { part: 'evening', nowTitle: 'Offerte' }), 'Rustige avond. Wat open staat, wacht tot morgen.');
+  assert.equal(dashyLine(idle, { part: 'day', nowTitle: 'Offerte' }), 'Nu: Offerte.');
+  assert.equal(dashyLine(idle, { part: 'morning', music: 'Song' }), 'Ik hoor Song.');
+  assert.equal(dashyLine({ rule: 'deadlineNear', state: 'angry' }, { part: 'evening' }), 'Het is bijna zover. Nu doen.');
+});

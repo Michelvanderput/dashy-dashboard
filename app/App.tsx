@@ -5,6 +5,7 @@ import { webStore } from '../src/spotify/auth';
 import { sendAction, type ActionKind } from '../src/state-client';
 import { setToday, type Habit } from '../src/dashboard/habits';
 import { extendSession, startSession, type Session } from '../src/dashboard/session';
+import { laterMs, type Later } from '../src/dashboard/time';
 import { addEntry, parseLog, type UrgeOutcome } from '../src/dashboard/urge';
 import { initialModel, reducer, type Action, type PlanItem } from '../src/dashboard/plan';
 import { resolve, type Resolution, type RuleName } from '../src/driver';
@@ -54,7 +55,8 @@ export function App() {
   // Focus session (one task, 10 minutes) and demo habits live here; in real mode the plan and habits come from the server.
   const [session, setSession] = useState<Session | null>(null);
   const [demoHabits, setDemoHabits] = useState<Habit[]>(() => [{ id: 'wandelen', title: 'Wandelen', perWeek: 3, plan: 'Als ik koffie zet, dan loop ik daarna 5 minuten.', done: [] }, { id: 'water', title: 'Water drinken', perWeek: 5, done: [] }]);
-  const act = (a: ActionKind, extra: { id?: string | null; title?: string } = {}) => {
+  const [demoFocused, setDemoFocused] = useState(0);
+  const act = (a: ActionKind, extra: { id?: string | null; title?: string; until?: Later; minutes?: number; flag?: 'break' | 'blocked' | 'waiting'; value?: boolean } = {}) => {
     if (!connection?.actionToken) return;
     void sendAction({ url: connection.actionUrl, token: connection.actionToken, action: a, ...extra }).then(r => { if (r) remote.apply(r); });
   };
@@ -87,7 +89,16 @@ export function App() {
         onAdd={canAct ? title => remoteOn ? act('add', { title }) : dispatch({ type: 'add', item: { id: `u${Date.now()}`, kind: 'task', title, at: null } }) : undefined}
         session={session}
         onStartSession={task => setSession(startSession(task, Date.now()))}
-        onSessionEnd={o => setSession(cur => (o === 'more' && cur ? extendSession(cur, Date.now()) : null))}
+        onSessionEnd={o => {
+          // finished minutes (whole minutes actually worked, at most the block) count for today; a stop under a minute counts for nothing
+          const cur = session;
+          if (cur) { const m = Math.min(cur.minutes, Math.floor((Date.now() - cur.startedAt) / MIN)); if (m >= 1) { if (remoteOn) act('focused', { minutes: m }); else setDemoFocused(x => x + m); } }
+          setSession(o === 'more' && cur ? extendSession(cur, Date.now()) : null);
+        }}
+        onSnooze={canAct ? (id, until) => remoteOn ? act('later', { id, until }) : dispatch({ type: 'later', id, at: laterMs(until, Date.now()) }) : undefined}
+        flags={remoteOn ? remote.flags : { break: model.driver.onBreak, blocked: model.driver.blocked, waiting: model.driver.waiting }}
+        onFlag={canAct ? (flag, value) => remoteOn ? act('flag', { flag, value }) : dispatch({ type: 'flag', flag, value }) : undefined}
+        focusedMinutes={remoteOn ? remote.focusedMinutes : demoFocused}
         onUrge={onUrge}
         onToggleDone={remoteOn ? (connection!.actionToken ? (id, done) => { void sendAction({ url: connection!.actionUrl, token: connection!.actionToken!, action: done ? 'done' : 'undo', id }).then(r => { if (r) remote.apply(r); }); } : undefined) : (id, done) => dispatch({ type: done ? 'done' : 'undo', id })}
       />
