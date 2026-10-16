@@ -78,3 +78,19 @@ describe('useDashyTasks: check off from the screen', () => {
     expect(result.current.snapshot?.tasks).toHaveLength(2); expect(result.current.justDone).toBeNull(); expect(result.current.undo).toBeUndefined();
   });
 });
+
+describe('useDashyTasks: stays live', () => {
+  it('looks again at once when the window comes back (pageshow, focus, online), not only after the interval', async () => {
+    const f = vi.fn(async () => ok(body([['a', 'Bellen', 'werk', 'vandaag', '']])));
+    renderHook(() => useDashyTasks({ url: 'https://x.test/api/state', intervalMs: 60_000, fetch: f as never }));
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(1));
+    for (const [i, ev] of ['pageshow', 'focus', 'online'].entries()) { await act(async () => { window.dispatchEvent(new Event(ev)); }); await waitFor(() => expect(f).toHaveBeenCalledTimes(i + 2)); }
+  });
+  it('reports lastOkAt, and a failing poll keeps the old tasks', async () => {
+    const f = vi.fn().mockResolvedValueOnce(ok(body([['a', 'Bellen', 'werk', 'vandaag', '']]))).mockRejectedValue(new TypeError('offline'));
+    const { result } = renderHook(() => useDashyTasks({ url: 'https://x.test/api/state', intervalMs: 40, fetch: f as never }));
+    await waitFor(() => expect(result.current.lastOkAt).not.toBeNull());
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.snapshot?.tasks).toHaveLength(1); expect(result.current.stale).toBe(false);
+  });
+});

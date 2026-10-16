@@ -36,6 +36,7 @@ export function App() {
             {now && tasks.complete && <button type="button" onClick={() => void tasks.complete!(now.id)} style={btn}>Klaar</button>}
             {tasks.justDone && <span role="status" style={{ display: 'block', fontSize: '.85rem', marginTop: 8 }}>✓ {tasks.justDone.title}{tasks.undo && <> · <button type="button" onClick={() => void tasks.undo!()} style={link}>Ongedaan maken</button></>}</span>}
             {still > 0 && <span style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{still} nog open van eerder</span>}
+            {tasks.lastOkAt && tasks.stale && !tasks.error && <span role="status" style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>Niet bijgewerkt sinds {new Date(tasks.lastOkAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>}
             {tasks.error && <span role="status" style={{ display: 'block', fontSize: '.8rem', opacity: .6 }}>{tasks.error}</span>}
           </p>
         ) : (

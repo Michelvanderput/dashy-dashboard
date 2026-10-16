@@ -10,7 +10,7 @@ export interface UseDashyTasksOptions {
   /** URL of the dashboard JSON. undefined = not connected: Dashy stays calm and `connected` is false. */
   url?: string;
   token?: string | null;
-  /** Default 30 s. Paused while the window is hidden. */
+  /** Default 10 s. Paused while the window is hidden, and it looks again at once when the window comes back (visible, focus, pageshow, online). */
   intervalMs?: number;
   fetch?: typeof fetch;
 }
@@ -22,17 +22,24 @@ export interface DashyTasks extends Resolution {
   undo?: () => Promise<boolean>;
   /** The task that was just checked off (for an "Ongedaan maken" button), until `UNDO_MS` has passed. */
   justDone: { id: string; title: string } | null;
+  /** When the dashboard was last read successfully (ms), so the screen can say it is out of date instead of silently showing old tasks. */
+  lastOkAt: number | null;
+  /** True when the last successful read is more than 90 s old (the screen is probably not live). Re-evaluated every 30 s. */
+  stale: boolean;
 }
 export const UNDO_MS = 8000;
 
 /** Polls the dashboard and feeds the changes to the driver, so Dashy's state follows your real tasks. A failed poll keeps the last picture and shows an error text; it never throws. */
-export function useDashyTasks({ url, token, actionUrl, actionToken, intervalMs = 30_000, fetch: f }: UseDashyTasksOptions): DashyTasks {
+export function useDashyTasks({ url, token, actionUrl, actionToken, intervalMs = 10_000, fetch: f }: UseDashyTasksOptions): DashyTasks {
   const driver = useStateDriver(TASK_DRIVER_CONFIG);
   const dispatch = useRef(driver.dispatch); dispatch.current = driver.dispatch;
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const prev = useRef<DashboardSnapshot | null>(null);
   const [justDone, setJustDone] = useState<{ id: string; title: string } | null>(null);
+  const [lastOkAt, setLastOkAt] = useState<number | null>(null);
+  const [, setBeat] = useState(0);
+  useEffect(() => { const id = setInterval(() => setBeat(n => n + 1), 30_000); return () => clearInterval(id); }, []);
   const busy = useRef(0); // while an action is in flight a poll answer could be older than the action, so it is ignored
 
   useEffect(() => {
@@ -48,15 +55,18 @@ export function useDashyTasks({ url, token, actionUrl, actionToken, intervalMs =
         const next = parseDashboard(await res.text());
         if (stop || busy.current > 0) return;
         for (const e of snapshotEvents(prev.current, next)) dispatch.current(e);
-        prev.current = next; setSnapshot(next); setError(null);
+        prev.current = next; setSnapshot(next); setError(null); setLastOkAt(Date.now());
       } catch (e) { if (!stop) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'Dashboard niet bereikbaar'); }
       finally { clearTimeout(kill); }
       if (!stop) timer = setTimeout(tick, intervalMs);
     };
     void tick();
     const onVisible = () => { if (!document.hidden) { clearTimeout(timer); void tick(); } };
+    // iOS home-screen apps and laptops waking up do not always fire visibilitychange: also listen for focus, pageshow and online
+    const again = () => { if (typeof document === 'undefined' || !document.hidden) { clearTimeout(timer); void tick(); } };
     document.addEventListener('visibilitychange', onVisible);
-    return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };
+    window.addEventListener('focus', again); window.addEventListener('pageshow', again); window.addEventListener('online', again);
+    return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', again); window.removeEventListener('pageshow', again); window.removeEventListener('online', again); };
   }, [url, token, intervalMs, f]);
 
   useEffect(() => { if (!justDone) return; const id = setTimeout(() => setJustDone(null), UNDO_MS); return () => clearTimeout(id); }, [justDone]);
@@ -92,5 +102,5 @@ export function useDashyTasks({ url, token, actionUrl, actionToken, intervalMs =
     finally { busy.current--; }
   };
 
-  return { state: driver.state, rule: driver.rule, snapshot, connected: !!url, error, justDone, complete: canAct ? complete : undefined, undo: canAct && justDone ? undo : undefined };
+  return { state: driver.state, rule: driver.rule, snapshot, connected: !!url, error, justDone, lastOkAt, stale: lastOkAt !== null && Date.now() - lastOkAt > 90_000, complete: canAct ? complete : undefined, undo: canAct && justDone ? undo : undefined };
 }
