@@ -1,119 +1,48 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Dashboard, useNow, useRemoteDashy, useSpotify } from '../src/react';
-import { adoptHash, loadConnection } from '../src/connection';
-import { webStore } from '../src/spotify/auth';
-import { sendAction, type ActionKind } from '../src/state-client';
-import { setToday, type Habit } from '../src/dashboard/habits';
-import { extendSession, startSession, type Session } from '../src/dashboard/session';
-import { laterMs, type Later } from '../src/dashboard/time';
-import { addEntry, parseLog, type UrgeOutcome } from '../src/dashboard/urge';
-import { initialModel, reducer, type Action, type PlanItem } from '../src/dashboard/plan';
-import { resolve, type Resolution, type RuleName } from '../src/driver';
-import { ConnectPanel } from './ConnectPanel';
-import { DemoPanel } from './DemoPanel';
-import { demoTrack, seedItems } from './demo';
+import { useState } from 'react';
+import { Dashy, NowPlayingBlock, useSpotify } from '../src/react';
+import { ALL_STATES, type DashyState } from '../src';
+import { demoTrack } from './demo';
+import { useNow } from './useNow';
 
 const env = import.meta.env as Record<string, string | undefined>;
-const MIN = 60_000;
+const LABEL: Record<DashyState, string> = {
+  idle: 'Rustig', received: 'Ontvangen', working: 'Aan het werk', thinking: 'Denkt na', waiting: 'Wacht', blocked: 'Zit vast', done: 'Klaar',
+  happy: 'Blij', sad: 'Sip', angry: 'Boos', strict: 'Streng', dancing: 'Danst', sleepy: 'Slaperig',
+};
 
-/** Open the app once with  /#key=<read token>&act=<action token>  : both stay on this device, never in the public bundle. */
-function connect() {
-  try {
-    const store = webStore('local');
-    const { cleaned, adopted } = adoptHash(location.hash, store);
-    if (adopted) history.replaceState(null, '', location.pathname + location.search + cleaned);
-    return loadConnection(store, location.origin);
-  } catch { return null; }
-}
-
-/** Map what the server says (MCP) back to a rule, for the attention logic. */
-const RULES: RuleName[] = ['done', 'received', 'blocked', 'deadlineSoon', 'deadlineNear', 'waiting', 'break', 'working', 'quiet', 'idle'];
-const fromRemote = (state: Resolution['state'], rule?: string): Resolution => ({ state, rule: (RULES as string[]).includes(rule ?? '') ? (rule as RuleName) : 'idle' });
-
-/** True inside the desktop shell (Tauri), where the app has no site of its own and Spotify's redirect cannot work. */
-const inShell = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-
+/** Two things for now: the avatar and the music player. Everything else is rebuilt from here. */
 export function App() {
-  const [connected, setConnected] = useState(0); // bumps after the connect form, to read the stored connection again
-  const connection0 = useMemo(connect, [connected]);
-  if (inShell && !connection0) return <ConnectPanel onDone={() => setConnected(n => n + 1)} />;
-  return <Main />;
-}
-
-function Main() {
   const now = useNow(1000);
-  const nowRef = useRef(now); nowRef.current = now;
-  const [model, send] = useReducer((m: ReturnType<typeof initialModel>, a: Action & { at: number }) => reducer(m, a, a.at), undefined, () => initialModel(seedItems(Date.now()), Date.now()));
-  const dispatch = (a: Action) => send({ ...a, at: Date.now() });
-  const [track, setTrack] = useState(0);
-  const [demoMusic, setDemoMusic] = useState(false);
-
-  // Real sources, when configured in .env.local; otherwise the demo.
-  const spotifyId = inShell ? undefined : env.VITE_SPOTIFY_CLIENT_ID;
+  const [state, setState] = useState<DashyState>('idle');
+  const [demoPlaying, setDemoPlaying] = useState(false), [track, setTrack] = useState(0);
+  const spotifyId = env.VITE_SPOTIFY_CLIENT_ID;
   const sp = useSpotify({ clientId: spotifyId ?? 'not-configured', redirectUri: env.VITE_SPOTIFY_REDIRECT_URI ?? `${location.origin}/` });
-  const connection = useMemo(connect, []);
-  const remoteOn = !!connection;
-  const remote = useRemoteDashy({ url: connection?.stateUrl ?? '', token: connection?.token ?? '', enabled: remoteOn });
-
-  // Real mode (connected via the link): never show the invented demo day. Dashy and the lists follow the server (what Claude put there).
-  const local = resolve(model.driver, now);
-  const useRemote = remoteOn && remote.source !== 'fallback';
-  const resolution = remoteOn ? (useRemote ? fromRemote(remote.state, remote.rule) : fromRemote('idle', 'idle')) : local;
-  const items = remoteOn ? remote.items : model.items;
-  const hour = new Date(now).getHours(), night = hour >= 22 || hour < 7;
-  const line = useRemote && remote.source === 'claude' ? remote.line : undefined;
-
-  // Focus session (one task, 10 minutes) and demo habits live here; in real mode the plan and habits come from the server.
-  const [session, setSession] = useState<Session | null>(null);
-  const [demoHabits, setDemoHabits] = useState<Habit[]>(() => [{ id: 'wandelen', title: 'Wandelen', perWeek: 3, plan: 'Als ik koffie zet, dan loop ik daarna 5 minuten.', done: [] }, { id: 'water', title: 'Water drinken', perWeek: 5, done: [] }]);
-  const [demoFocused, setDemoFocused] = useState(0);
-  const act = (a: ActionKind, extra: { id?: string | null; title?: string; until?: Later; minutes?: number; flag?: 'break' | 'blocked' | 'waiting'; value?: boolean } = {}) => {
-    if (!connection?.actionToken) return;
-    void sendAction({ url: connection.actionUrl, token: connection.actionToken, action: a, ...extra }).then(r => { if (r) remote.apply(r); });
-  };
-  const canAct = !remoteOn || !!connection?.actionToken;
-  // How an "Even stoppen" ended stays on this device only (never sent anywhere, never shown as a count).
-  const onUrge = (o: UrgeOutcome) => { try { const st = webStore('local'); st.set('dashy.urges', JSON.stringify(addEntry(parseLog(st.get('dashy.urges')), { at: Date.now(), outcome: o }))); } catch { /* storage not available: fine */ } };
-
-  const nowPlaying = spotifyId ? sp.nowPlaying : demoMusic ? demoTrack(now, true, track) : null;
-  useEffect(() => { dispatch({ type: 'music', playing: !!nowPlaying?.playing }); }, [nowPlaying?.playing]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const add = (item: PlanItem) => dispatch({ type: 'add', item });
-  const actions = useMemo(() => ({
-    deadline: (m: number) => add({ id: `d${Date.now()}`, kind: 'task', title: m > 30 ? 'Offerte afronden' : 'Factuur versturen', at: Date.now() + m * MIN }),
-    appointment: (m: number) => add({ id: `a${Date.now()}`, kind: 'event', title: 'Bellen met de klant', at: Date.now() + m * MIN, endsAt: Date.now() + (m + 30) * MIN }),
-    finishFirst: () => { const t = model.items.filter(i => i.kind === 'task' && !i.done).sort((a, b) => (a.at ?? 1e18) - (b.at ?? 1e18))[0]; if (t) dispatch({ type: 'done', id: t.id }); },
-    music: () => setDemoMusic(v => !v), nextTrack: () => { setTrack(t => t + 1); setDemoMusic(true); },
-    flag: (f: 'waiting' | 'blocked' | 'break') => dispatch({ type: 'flag', flag: f, value: !(f === 'waiting' ? model.driver.waiting : f === 'blocked' ? model.driver.blocked : model.driver.onBreak) }),
-    reset: () => { setDemoMusic(false); dispatch({ type: 'reset', items: seedItems(Date.now()) }); },
-    state: { music: demoMusic, waiting: model.driver.waiting, blocked: model.driver.blocked, onBreak: model.driver.onBreak },
-  }), [model, demoMusic]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nowPlaying = spotifyId ? sp.nowPlaying : demoPlaying ? demoTrack(now, true, track) : null;
 
   return (
-    <>
-      <Dashboard
-        now={now} items={items} resolution={resolution} line={line} night={night} keepAwake emptyText={remoteOn ? 'Vraag Claude om iets op je scherm te zetten.' : undefined}
-        music={{ nowPlaying, status: spotifyId ? sp.status : 'connected', onConnect: spotifyId ? sp.connect : undefined, onDisconnect: spotifyId ? sp.disconnect : undefined, error: sp.error, spotifyLogoSrc: env.VITE_SPOTIFY_LOGO }}
-        focusTaskId={remoteOn ? remote.focusId : undefined}
-        habits={remoteOn ? remote.habits : demoHabits}
-        onHabit={canAct ? (id, checked) => remoteOn ? act(checked ? 'check' : 'uncheck', { id }) : setDemoHabits(hs => hs.map(h => h.id === id ? setToday(h, checked, Date.now()) : h)) : undefined}
-        onAdd={canAct ? title => remoteOn ? act('add', { title }) : dispatch({ type: 'add', item: { id: `u${Date.now()}`, kind: 'task', title, at: null } }) : undefined}
-        session={session}
-        onStartSession={task => setSession(startSession(task, Date.now()))}
-        onSessionEnd={o => {
-          // finished minutes (whole minutes actually worked, at most the block) count for today; a stop under a minute counts for nothing
-          const cur = session;
-          if (cur) { const m = Math.min(cur.minutes, Math.floor((Date.now() - cur.startedAt) / MIN)); if (m >= 1) { if (remoteOn) act('focused', { minutes: m }); else setDemoFocused(x => x + m); } }
-          setSession(o === 'more' && cur ? extendSession(cur, Date.now()) : null);
-        }}
-        onSnooze={canAct ? (id, until) => remoteOn ? act('later', { id, until }) : dispatch({ type: 'later', id, at: laterMs(until, Date.now()) }) : undefined}
-        flags={remoteOn ? remote.flags : { break: model.driver.onBreak, blocked: model.driver.blocked, waiting: model.driver.waiting }}
-        onFlag={canAct ? (flag, value) => remoteOn ? act('flag', { flag, value }) : dispatch({ type: 'flag', flag, value }) : undefined}
-        focusedMinutes={remoteOn ? remote.focusedMinutes : demoFocused}
-        onUrge={onUrge}
-        onToggleDone={remoteOn ? (connection!.actionToken ? (id, done) => { void sendAction({ url: connection!.actionUrl, token: connection!.actionToken!, action: done ? 'done' : 'undo', id }).then(r => { if (r) remote.apply(r); }); } : undefined) : (id, done) => dispatch({ type: done ? 'done' : 'undo', id })}
-      />
-      {!remoteOn && <DemoPanel a={actions} />}
-    </>
+    <main style={{ minHeight: '100dvh', display: 'grid', gap: 'clamp(12px,2vmin,24px)', padding: 'clamp(12px,2vmin,24px)', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,22rem),1fr))', alignContent: 'center', maxWidth: 1100, margin: '0 auto', boxSizing: 'border-box' }}>
+      <h1 className="sr">Dashy</h1>
+      <section aria-labelledby="av" style={card}>
+        <h2 id="av" className="sr">Avatar</h2>
+        <Dashy state={state} size="min(60vmin,280px)" />
+        <div role="group" aria-label="Stemming van Dashy" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+          {ALL_STATES.map(s => <button key={s} type="button" aria-pressed={s === state} onClick={() => setState(s)} style={chip(s === state)}>{LABEL[s]}</button>)}
+        </div>
+      </section>
+      <section aria-labelledby="mu" style={card}>
+        <h2 id="mu" className="sr">Muziek</h2>
+        <NowPlayingBlock bare nowPlaying={nowPlaying} status={spotifyId ? sp.status : 'connected'} size="min(40vmin,180px)"
+          onConnect={spotifyId ? sp.connect : undefined} onDisconnect={spotifyId ? sp.disconnect : undefined} error={sp.error} spotifyLogoSrc={env.VITE_SPOTIFY_LOGO} />
+        {!spotifyId && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" aria-pressed={demoPlaying} onClick={() => setDemoPlaying(v => !v)} style={chip(demoPlaying)}>{demoPlaying ? 'Demo: stop' : 'Demo: speel'}</button>
+            <button type="button" onClick={() => { setTrack(t => t + 1); setDemoPlaying(true); }} style={chip(false)}>Volgend nummer</button>
+          </div>
+        )}
+      </section>
+    </main>
   );
 }
+
+const card: React.CSSProperties = { display: 'grid', gap: 16, justifyItems: 'center', alignContent: 'center', padding: 'clamp(18px,3vmin,32px)', borderRadius: 28, background: 'var(--card)' };
+const chip = (on: boolean): React.CSSProperties => ({ minHeight: 44, padding: '0 14px', borderRadius: 999, border: '1px solid var(--line)', background: on ? 'var(--ink)' : 'transparent', color: on ? 'var(--card)' : 'var(--ink)', font: 'inherit', cursor: 'pointer' });

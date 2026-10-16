@@ -1,7 +1,7 @@
 {
   "name": "dashy-avatar",
   "version": "0.1.0",
-  "description": "Dashy: a living avatar (eyes only) driven by a small, dependency-free spring simulation.",
+  "description": "Dashy: a living avatar (eyes only) and a vinyl music player with Spotify.",
   "type": "module",
   "main": "dist/dashy.js",
   "module": "dist/dashy.js",
@@ -13,30 +13,21 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts && vitest run",
-    "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && esbuild src/advice-index.ts --bundle --format=esm --minify --outfile=dist/advice.js && esbuild src/spotify/index.ts --bundle --format=esm --minify --outfile=dist/spotify.js && tsc -p tsconfig.build.json && node scripts/make-demo.mjs",
+    "build": "esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/dashy.js && esbuild src/react/index.ts --bundle --format=esm --minify --external:react --outfile=dist/react.js && esbuild src/spotify/index.ts --bundle --format=esm --minify --outfile=dist/spotify.js && tsc -p tsconfig.build.json && node scripts/make-demo.mjs",
     "demo": "node scripts/make-demo.mjs",
     "export": "tsx scripts/export-static.ts",
     "swift:reference": "tsx scripts/swift-reference.ts",
     "swift:test": "cd swift/DashyKit && swift test",
     "dev": "vite",
-    "app:build": "vite build",
-    "desktop:dev": "npx --yes @tauri-apps/cli@2 dev",
-    "desktop:build": "npx --yes @tauri-apps/cli@2 build",
-    "desktop:icons": "npx --yes @tauri-apps/cli@2 icon app/public/icons/icon-512.png -o src-tauri/icons"
+    "app:build": "vite build"
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.81",
     "@fontsource-variable/geist": "^5.3.0",
-    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^26.6.5",
-    "@upstash/ratelimit": "^2.2.0",
-    "@upstash/redis": "^1.39.0",
-    "ai": "^7.0.142",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "zod": "^4.6.7"
+    "typescript": "^7.0.2"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
@@ -60,10 +51,6 @@
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react.js"
-    },
-    "./advice": {
-      "types": "./dist/advice-index.d.ts",
-      "import": "./dist/advice.js"
     },
     "./spotify": {
       "types": "./dist/spotify/index.d.ts",
