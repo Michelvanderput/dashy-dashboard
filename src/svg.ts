@@ -1,3 +1,4 @@
+import { smallGeometry, SMALL_MAX_PX, type Variant } from './small';
 import { createDashy, type Dashy, type DashyOptions, type DashyState, type Geometry, type Shape } from './core';
 
 export interface MountOptions extends DashyOptions {
@@ -7,6 +8,8 @@ export interface MountOptions extends DashyOptions {
   labels?: Partial<Record<DashyState, string>>;
   /** Force reduced motion. Default: follow the system setting. */
   reducedMotion?: boolean;
+  /** 'small' = simpler drawing for 24 to 32 px. 'auto' (default) picks it from the rendered size. */
+  variant?: Variant;
 }
 export interface DashyHandle {
   dashy: Dashy;
@@ -58,7 +61,11 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     return { g: q<SVGGElement>(`.eye${s}`), pill, lid, low: m.querySelector('ellipse')! };
   });
 
-  function draw(G: Geometry) {
+  let small = opts.variant === 'small';
+  const outlineW = () => (small ? '8' : '1');
+  function draw(G0: Geometry) {
+    const G = small ? smallGeometry(G0) : G0;
+    outline.setAttribute('stroke-width', outlineW());
     outline.setAttribute('rx', f(Math.max(0, G.rx - 0.5))); clip.setAttribute('rx', f(G.rx));
     const b = G.body, fc = G.face;
     body.setAttribute('transform', `translate(${f(b.tx)} ${f(b.ty)}) rotate(${f(b.rot)}) scale(${f(b.sx)} ${f(b.sy)}) translate(-150 -260)`);
@@ -76,6 +83,7 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     });
   }
 
+  const pickVariant = () => { if (opts.variant === 'auto' || opts.variant === undefined) small = svg.getBoundingClientRect().width > 0 && svg.getBoundingClientRect().width <= SMALL_MAX_PX; };
   let raf = 0, destroyed = false, offscreen = false;
   const now = () => performance.now();
   const setTitle = () => { title.textContent = labels[dashy.getState()]; };
@@ -112,6 +120,8 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
   svg.addEventListener('pointerdown', onDown);
   const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   mq?.addEventListener('change', applyMotionPreference);
+  const ro = typeof ResizeObserver === 'function' && (opts.variant ?? 'auto') === 'auto' ? new ResizeObserver(() => { pickVariant(); if (reduced()) settleAndDraw(); }) : null;
+  ro?.observe(svg); pickVariant();
   const onVisibility = () => applyMotionPreference();
   document.addEventListener('visibilitychange', onVisibility);
   const io = typeof IntersectionObserver === 'function'
@@ -128,7 +138,7 @@ export function mountDashy(container: HTMLElement, opts: MountOptions = {}): Das
     poke: onDown,
     destroy() {
       destroyed = true; cancelAnimationFrame(raf);
-      document.removeEventListener('visibilitychange', onVisibility); io?.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility); io?.disconnect(); ro?.disconnect();
       window.removeEventListener('pointermove', onMove); mq?.removeEventListener('change', applyMotionPreference);
       svg.remove();
     },

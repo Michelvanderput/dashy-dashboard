@@ -146,3 +146,19 @@ describe('useStateDriver', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('small variant', () => {
+  const stroke = (c: HTMLElement) => c.querySelector('.outline')!.getAttribute('stroke-width');
+  it('auto: thicker outline at 24 px, normal when the element is large', () => {
+    const rects = new Map<Element, number>();
+    vi.stubGlobal('ResizeObserver', class { cb: any; constructor(cb: any) { this.cb = cb; } observe() {} disconnect() {} });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) { const w = rects.get(this) ?? 100; return { width: w, height: w, left: 0, top: 0, right: w, bottom: w, x: 0, y: 0, toJSON() {} }; });
+    const { container } = render(<Dashy reducedMotion={false} />);
+    const svg = img(container);
+    act(() => frame(16)); expect(stroke(container)).toBe('1');
+    rects.set(svg, 28); // simulate being resized to menu-bar size
+    const { container: c2 } = render(<Dashy variant="small" reducedMotion={false} />);
+    act(() => frame(32)); expect(stroke(c2)).toBe('8');
+    vi.restoreAllMocks();
+  });
+});

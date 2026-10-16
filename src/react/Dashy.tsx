@@ -11,6 +11,8 @@ export interface DashyProps {
   labels?: MountOptions['labels'];
   /** Also announce state changes to screen readers (polite). Default false: the label is on the image itself. */
   announce?: boolean;
+  /** 'auto' (default) uses the small drawing at 32 px and below. */
+  variant?: 'full' | 'small' | 'auto';
   /** Force reduced motion. Default: follow the system setting. */
   reducedMotion?: boolean;
   /** Seed for blink timing and glances. Read when Dashy mounts. */
@@ -22,7 +24,7 @@ export interface DashyProps {
 const SR_ONLY: CSSProperties = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
 
 /** Dashy as a React component. All motion comes from core.ts; this only mounts it and passes props through. */
-export function Dashy({ state = 'idle', shape = 'square', size = 96, labels, announce = false, reducedMotion, seed, className, style }: DashyProps) {
+export function Dashy({ state = 'idle', shape = 'square', size = 96, labels, announce = false, variant = 'auto', reducedMotion, seed, className, style }: DashyProps) {
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<DashyHandle | null>(null);
   const latest = useRef({ state, shape, labels });
@@ -30,10 +32,10 @@ export function Dashy({ state = 'idle', shape = 'square', size = 96, labels, ann
 
   // Mount once (and again only if reducedMotion or seed change). labels are read from `latest`, so an inline object does not remount.
   useEffect(() => {
-    const h = mountDashy(host.current!, { ...latest.current, initialState: latest.current.state, reducedMotion, seed });
+    const h = mountDashy(host.current!, { ...latest.current, initialState: latest.current.state, variant, reducedMotion, seed });
     handle.current = h;
     return () => { h.destroy(); handle.current = null; };
-  }, [reducedMotion, seed]);
+  }, [variant, reducedMotion, seed]);
 
   useEffect(() => { const h = handle.current; if (h && h.getState() !== state) h.setState(state); }, [state]);
   useEffect(() => { handle.current?.setShape(shape); }, [shape]);

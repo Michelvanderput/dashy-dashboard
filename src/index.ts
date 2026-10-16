@@ -4,3 +4,5 @@ export { mountDashy } from './svg';
 export type { DashyHandle, MountOptions } from './svg';
 export { DEFAULT_CONFIG, RULES, initialDriverState, nextWakeAt, reduce, resolve } from './driver';
 export type { DriverConfig, DriverEvent, DriverState, Resolution, RuleName } from './driver';
+export { smallGeometry, SMALL_MAX_PX } from './small';
+export type { Variant } from './small';

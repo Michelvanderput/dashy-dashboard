@@ -1,3 +1,4 @@
+import { type Variant } from './small';
 import { type Dashy, type DashyOptions, type DashyState, type Shape } from './core';
 export interface MountOptions extends DashyOptions {
     shape?: Shape;
@@ -6,6 +7,8 @@ export interface MountOptions extends DashyOptions {
     labels?: Partial<Record<DashyState, string>>;
     /** Force reduced motion. Default: follow the system setting. */
     reducedMotion?: boolean;
+    /** 'small' = simpler drawing for 24 to 32 px. 'auto' (default) picks it from the rendered size. */
+    variant?: Variant;
 }
 export interface DashyHandle {
     dashy: Dashy;

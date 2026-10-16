@@ -10,6 +10,8 @@ export interface DashyProps {
     labels?: MountOptions['labels'];
     /** Also announce state changes to screen readers (polite). Default false: the label is on the image itself. */
     announce?: boolean;
+    /** 'auto' (default) uses the small drawing at 32 px and below. */
+    variant?: 'full' | 'small' | 'auto';
     /** Force reduced motion. Default: follow the system setting. */
     reducedMotion?: boolean;
     /** Seed for blink timing and glances. Read when Dashy mounts. */
@@ -18,4 +20,4 @@ export interface DashyProps {
     style?: CSSProperties;
 }
 /** Dashy as a React component. All motion comes from core.ts; this only mounts it and passes props through. */
-export declare function Dashy({ state, shape, size, labels, announce, reducedMotion, seed, className, style }: DashyProps): import("react").JSX.Element;
+export declare function Dashy({ state, shape, size, labels, announce, variant, reducedMotion, seed, className, style }: DashyProps): import("react").JSX.Element;
