@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Dashy, DashyBody, NowPlayingBlock, useSpotify } from '../src/react';
+import { Dashy, NowPlayingBlock, useSpotify } from '../src/react';
 import type { DashyState } from '../src';
 
 const env = import.meta.env as Record<string, string | undefined>;
@@ -18,7 +18,7 @@ export function App() {
       <h1 className="sr">Dashy</h1>
       <section aria-labelledby="av" style={{ display: 'grid', placeItems: 'center', minHeight: 0 }}>
         <h2 id="av" className="sr">Avatar</h2>
-        <div style={{ width: '100%', maxWidth: '30rem', aspectRatio: '1' }}><DashyBody state={state} /></div>
+        <div style={{ width: '100%', maxWidth: '30rem', aspectRatio: '1' }}><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
       </section>
       <section aria-labelledby="mu" style={card}>
         <h2 id="mu" className="sr">Muziek</h2>
