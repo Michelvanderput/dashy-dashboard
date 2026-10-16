@@ -51,7 +51,7 @@ export function useDashyTasks({ url, token, actionUrl, actionToken, intervalMs =
       const ctl = new AbortController(), kill = setTimeout(() => ctl.abort(), 8000);
       try {
         const res = await (f ?? fetch)(url, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: ctl.signal, cache: 'no-store' });
-        if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'Geen toegang: controleer de sleutel' : `Dashboard gaf status ${res.status}`);
+        if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'Geen toegang: controleer de sleutel' : res.status === 502 || res.status === 503 ? 'De opslag van het dashboard reageert niet. Dashy probeert het zo opnieuw.' : `Dashboard gaf status ${res.status}`);
         const next = parseDashboard(await res.text());
         if (stop || busy.current > 0) return;
         for (const e of snapshotEvents(prev.current, next)) dispatch.current(e);

@@ -17,8 +17,19 @@ async function prune(store: Store, all: Task[], now: number) {
   if (old.length) await store.deleteTasks(old);
 }
 
+/**
+ * The hours are an extra, never a condition: when their storage is missing (the dashy_time table was not created yet) or fails, the screen
+ * still shows tasks, appointment and day, just without hours. The tools that work on hours say what to do instead (see `hoursStore`).
+ */
+const entriesOrNone = (store: Store) => store.entries().catch(e => { console.error('hours storage unavailable', e); return [] as TimeEntry[]; });
+export const HOURS_SETUP = 'De uren-opslag is nog niet ingesteld: voer het onderste deel van db/dashy-tasks.sql (tabel dashy_time) uit in Supabase.';
+/** For the hour tools: the entries, or a clear message for the user (Claude passes it on). */
+async function hoursStore(store: Store): Promise<TimeEntry[]> {
+  try { return await store.entries(); } catch (e) { console.error('hours storage unavailable', e); throw new InputError(HOURS_SETUP); }
+}
+
 export async function dashboard(store: Store, now: number, workday?: WorkdayConfig): Promise<StateBody> {
-  const [all, appt, entries] = await Promise.all([store.tasks(), store.appointment(), store.entries()]);
+  const [all, appt, entries] = await Promise.all([store.tasks(), store.appointment(), entriesOrNone(store)]);
   return buildState(all, appt, now, undefined, workday, entries);
 }
 
@@ -119,7 +130,7 @@ const perProject = (es: TimeEntry[]) => {
 /** Time spent: "2 hours for client A on the report". A batch with one bad entry changes nothing. */
 export async function logTime(store: Store, input: unknown, now: number): Promise<{ logged: { id: string; day: string; project: string | null; minutes: number }[]; vandaag_min: number }> {
   const items = list(obj(input, 'invoer').entries, 'entries', ENTRIES_MAX);
-  const [tasks, all] = await Promise.all([store.tasks(), store.entries()]);
+  const [tasks, all] = await Promise.all([store.tasks(), hoursStore(store)]);
   const taken = new Set(all.map(e => e.id)), today = localParts(now).date;
   const made = items.map((raw, i): TimeEntry => wrap(i, () => {
     const o = obj(raw, 'entry'); known(o, ['minutes', 'description', 'project', 'day', 'task'], 'entry');
@@ -137,7 +148,7 @@ export async function logTime(store: Store, input: unknown, now: number): Promis
 /** Correct an entry: other minutes or project, move it to another day, or remove it. */
 export async function editTime(store: Store, input: unknown, now: number): Promise<{ updated: string[]; removed: string[] }> {
   const items = list(obj(input, 'invoer').edits, 'edits', ENTRIES_MAX);
-  const all = await store.entries(), byId = new Map(all.map(e => [e.id, e]));
+  const all = await hoursStore(store), byId = new Map(all.map(e => [e.id, e]));
   const put = new Map<string, TimeEntry>(), del: string[] = [];
   items.forEach((raw, i) => wrap(i, () => {
     const o = obj(raw, 'edit'); known(o, ['id', 'minutes', 'project', 'description', 'day', 'booked', 'remove'], 'edit');
@@ -161,7 +172,7 @@ export async function markBooked(store: Store, input: unknown, now: number): Pro
   const o = obj(input, 'invoer'); known(o, ['ids', 'day', 'project', 'booked'], 'invoer');
   if (o.ids === undefined && o.day === undefined) throw new InputError('geef ids of een day');
   if (o.booked !== undefined && typeof o.booked !== 'boolean') throw new InputError('booked moet true of false zijn');
-  const booked = o.booked !== false, all = await store.entries();
+  const booked = o.booked !== false, all = await hoursStore(store);
   let pick: TimeEntry[];
   if (o.ids !== undefined) {
     const ids = list(o.ids, 'ids', 100).map((x, i) => typeof x === 'string' ? x : at(i, 'id moet tekst zijn'));
@@ -179,7 +190,7 @@ export async function markBooked(store: Store, input: unknown, now: number): Pro
 export async function timeLog(store: Store, input: unknown, now: number) {
   const o = obj(input ?? {}, 'invoer'); known(o, ['day'], 'invoer');
   const today = localParts(now).date, day = o.day === undefined ? today : parseDay(o.day, now);
-  const all = await store.entries(), mine = all.filter(e => e.day === day).sort((a, b) => a.createdAt - b.createdAt);
+  const all = await hoursStore(store), mine = all.filter(e => e.day === day).sort((a, b) => a.createdAt - b.createdAt);
   return {
     day, regels: mine.map(e => [e.id, e.project, e.description, e.minutes, e.booked]), regels_format: '[id, project, omschrijving, minuten, geboekt]',
     totaal_min: sumMin(mine), te_boeken_min: sumMin(mine.filter(e => !e.booked)), per_project: perProject(mine), per_project_format: '[project, minuten, nog te boeken]',
@@ -204,7 +215,7 @@ export async function weekReview(store: Store, input: unknown, now: number) {
   const monday = dateOf(ay, am, ad, -((wd + 6) % 7)), [my, mm, md] = monday.split('-').map(Number);
   const days = DAY_NAMES.map((_, i) => dateOf(my, mm, md, i)), nextMonday = dateOf(my, mm, md, 7);
   const from = epochOf(monday), to = epochOf(nextMonday);
-  const [tasks, entries] = await Promise.all([store.tasks(), store.entries()]);
+  const [tasks, entries] = await Promise.all([store.tasks(), hoursStore(store)]);
   const done = tasks.filter(t => t.done && t.doneAt !== null && t.doneAt >= from && t.doneAt < to).sort((a, b) => a.doneAt! - b.doneAt!);
   const perCategory: Record<string, number> = {}; for (const t of done) perCategory[t.category] = (perCategory[t.category] ?? 0) + 1;
   const perDay = Object.fromEntries(DAY_NAMES.map(n => [n, 0])) as Record<string, number>, perPart = { ochtend: 0, middag: 0, avond: 0 };

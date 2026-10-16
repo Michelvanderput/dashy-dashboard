@@ -192,3 +192,18 @@ test('in free time a quiet evening does not make him sad, but in work time it do
   assert.equal(resolve(s, t0 + 3 * 3600_000, TASK_DRIVER_CONFIG).state, 'sad'); assert.equal(resolve(s, t0 + 3 * 3600_000, FREE_TIME_DRIVER_CONFIG).state, 'idle');
   assert.equal(resolve(s, t0 + 30 * 24 * 3600_000, FREE_TIME_DRIVER_CONFIG).state, 'idle');
 });
+
+// ---- a missing hours table must never take the dashboard down
+test('without hours storage the dashboard still works, and the hour tools say what to do', async () => {
+  const s = new MemoryStore(); const broken = { async entries() { throw new Error('storage status 404'); }, async putEntries() { throw new Error('storage status 404'); }, async deleteEntries() { throw new Error('x'); } };
+  const store = Object.assign(Object.create(Object.getPrototypeOf(s)), s, broken) as MemoryStore;
+  await addTasks(store, { tasks: [{ title: 'Wassen', category: 'thuis' }] }, NOW);
+  const d = await dashboard(store, NOW);
+  assert.deepEqual(d.tasks.map(t => t.title), ['Wassen']); assert.equal(d.hours.totalMin, 0); assert.equal(d.mode, 'work');
+  for (const call of [() => logTime(store, { entries: [{ minutes: 5, description: 'x' }] }, NOW), () => timeLog(store, {}, NOW), () => markBooked(store, { day: FRI }, NOW), () => editTime(store, { edits: [{ id: 'a', minutes: 5 }] }, NOW), () => weekReview(store, {}, NOW)])
+    await assert.rejects(call(), /uren-opslag is nog niet ingesteld.*dashy_time/);
+  const text = JSON.parse(JSON.stringify(await rpc(store as never, 'log_time', { entries: [{ minutes: 5, description: 'x' }] })));
+  assert.equal(text.result.isError, true); assert.match(text.result.content[0].text, /^Ongeldig: De uren-opslag is nog niet ingesteld/);
+  const st = await handleMcp(new Request('https://x.test/api/state', { method: 'POST', headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'dashboard', arguments: {} } }) }), { store, token: TOKEN, now: () => NOW });
+  assert.equal(JSON.parse(((await st.json()) as any).result.content[0].text).tasks.length, 1, 'the dashboard tool works too');
+});
