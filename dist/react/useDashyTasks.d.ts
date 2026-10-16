@@ -7,7 +7,7 @@ export interface UseDashyTasksOptions {
     /** URL of the dashboard JSON. undefined = not connected: Dashy stays calm and `connected` is false. */
     url?: string;
     token?: string | null;
-    /** Default 30 s. Paused while the window is hidden. */
+    /** Default 10 s. Paused while the window is hidden, and it looks again at once when the window comes back (visible, focus, pageshow, online). */
     intervalMs?: number;
     fetch?: typeof fetch;
 }
@@ -24,6 +24,10 @@ export interface DashyTasks extends Resolution {
         id: string;
         title: string;
     } | null;
+    /** When the dashboard was last read successfully (ms), so the screen can say it is out of date instead of silently showing old tasks. */
+    lastOkAt: number | null;
+    /** True when the last successful read is more than 90 s old (the screen is probably not live). Re-evaluated every 30 s. */
+    stale: boolean;
 }
 export declare const UNDO_MS = 8000;
 /** Polls the dashboard and feeds the changes to the driver, so Dashy's state follows your real tasks. A failed poll keeps the last picture and shows an error text; it never throws. */
