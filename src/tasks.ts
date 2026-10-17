@@ -7,12 +7,13 @@
  * never angry, and a deadline in the past is ignored by the driver (`TASK_DRIVER_CONFIG`).
  */
 import type { DriverConfig, DriverEvent } from './driver';
+import { splitNote } from './steps';
 import { addDays, localParts } from './server/time';
 
 export interface DashTask {
   id: string; title: string; category: string;
   /** ms since epoch, only when the task has a time of day */ due: number | null;
-  /** the text as shown ("morgen 14:00") */ when: string; note: string;
+  /** the text as shown ("morgen 14:00") */ when: string; note: string; /** the first small step, or '' */ step: string;
   /** "now" = can be done now, "later" = planned for later (Straks). */ state: 'now' | 'later';
 }
 export interface DashboardSnapshot {
@@ -103,7 +104,7 @@ export function parseDashboard(raw: unknown): DashboardSnapshot {
   if (!Array.isArray(o.tasks) || o.tasks.length > 500) throw new Error('bad tasks');
   const tasks = o.tasks.map((r: unknown): DashTask => {
     if (!Array.isArray(r) || !/^[A-Za-z0-9_-]{1,64}$/.test(String(r[0])) || !str(r[1], 200) || !str(r[2], 40) || !str(r[3] ?? '', 60)) throw new Error('bad task');
-    return { id: r[0] as string, title: r[1] as string, category: r[2] as string, when: (r[3] as string) ?? '', due: parseWhen((r[3] as string) ?? '', today), note: str(r[4], 400) ? (r[4] as string) : '', state: 'now' };
+    return { id: r[0] as string, title: r[1] as string, category: r[2] as string, when: (r[3] as string) ?? '', due: parseWhen((r[3] as string) ?? '', today), ...splitNote(str(r[4], 400) ? (r[4] as string) : ''), state: 'now' };
   });
   const leftOpen = Array.isArray(o.left_open) ? o.left_open.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
   return { today, tasks, leftOpen, timeTodayMin: parseMinutes(o.time_today), doneToday: 0, appointment: null, workday: DEFAULT_WORKDAY, mode: 'work', waiting: 0, hours: NO_HOURS };
@@ -119,7 +120,7 @@ function parseV2(o: Record<string, unknown>): DashboardSnapshot {
     const t = r as Record<string, unknown> | null;
     if (typeof t !== 'object' || t === null || !/^[A-Za-z0-9_-]{1,64}$/.test(String(t.id)) || !str(t.title, 200) || !str(t.category, 40)) throw new Error('bad task');
     const dueAt = typeof t.dueAt === 'number' && Number.isFinite(t.dueAt) ? t.dueAt : null, hasTime = t.hasTime === true;
-    return { id: t.id as string, title: t.title as string, category: t.category as string, due: dueAt !== null && hasTime ? dueAt : null, when: dueAt === null ? '' : whenLabel(dueAt, hasTime, nowMs), note: str(t.note, 400) ? (t.note as string) : '', state: t.state === 'later' ? 'later' : 'now' };
+    return { id: t.id as string, title: t.title as string, category: t.category as string, due: dueAt !== null && hasTime ? dueAt : null, when: dueAt === null ? '' : whenLabel(dueAt, hasTime, nowMs), ...splitNote(str(t.note, 400) ? (t.note as string) : ''), state: t.state === 'later' ? 'later' : 'now' };
   });
   const leftOpen = Array.isArray(o.leftOpen) ? o.leftOpen.filter((x): x is string => typeof x === 'string').slice(0, 500) : [];
   const a = o.appointment as Record<string, unknown> | null | undefined;

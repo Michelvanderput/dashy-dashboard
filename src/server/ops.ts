@@ -1,5 +1,6 @@
 /** The operations on the task list. Validate everything first, then write: a batch with one bad item changes nothing. */
-import { BATCH_MAX, TITLE_MAX, checkCategory, checkDescription, checkMinutes, checkNote, checkProject, checkTitle, InputError, newId, parseDay, parseDue, relativeDay, type Task, type TimeEntry } from './model.js';
+import { joinNote, splitNote } from '../steps.js';
+import { BATCH_MAX, TITLE_MAX, checkCategory, checkDescription, checkMinutes, checkNote, checkProject, checkStep, checkTitle, InputError, newId, parseDay, parseDue, relativeDay, type Task, type TimeEntry } from './model.js';
 import { addDays, localParts, startOfDay, zonedToEpoch, TIME_ZONE } from './time.js';
 import { buildState, type Appointment, type StateBody, type WorkdayConfig } from './plan.js';
 import type { Store } from './store.js';
@@ -40,11 +41,11 @@ export async function addTasks(store: Store, input: unknown, now: number): Promi
   const front = items.filter(x => (x as { now?: unknown })?.now === true).length;
   let f = 0, b = 0;
   const made = items.map((raw, i): Task => wrap(i, () => {
-    const o = obj(raw, 'taak'); known(o, ['title', 'category', 'due', 'note', 'now'], 'taak');
+    const o = obj(raw, 'taak'); known(o, ['title', 'category', 'due', 'note', 'step', 'now'], 'taak');
     const d = o.due === undefined ? null : parseDue(o.due, now);
     if (o.now !== undefined && typeof o.now !== 'boolean') throw new InputError('now moet true of false zijn');
     const id = newId(taken); taken.add(id);
-    return { id, title: checkTitle(o.title), category: checkCategory(o.category), dueAt: d?.dueAt ?? null, hasTime: d?.hasTime ?? false, note: o.note === undefined ? null : checkNote(o.note), done: false, doneAt: null, createdAt: now,
+    return { id, title: checkTitle(o.title), category: checkCategory(o.category), dueAt: d?.dueAt ?? null, hasTime: d?.hasTime ?? false, note: joinNote(o.note === undefined ? null : checkNote(o.note), o.step === undefined ? null : checkStep(o.step)), done: false, doneAt: null, createdAt: now,
       position: o.now === true ? minPos - front + f++ - 1 : maxPos + ++b };
   }));
   await store.putTasks(made);
@@ -57,14 +58,17 @@ export async function updateTasks(store: Store, input: unknown, now: number): Pr
   const all = await store.tasks(), byId = new Map(all.map(t => [t.id, t]));
   const put: Task[] = [], del: string[] = [];
   items.forEach((raw, i) => wrap(i, () => {
-    const o = obj(raw, 'update'); known(o, ['id', 'done', 'title', 'category', 'due', 'note', 'remove'], 'update');
+    const o = obj(raw, 'update'); known(o, ['id', 'done', 'title', 'category', 'due', 'note', 'step', 'remove'], 'update');
     const cur = typeof o.id === 'string' ? byId.get(o.id) : undefined;
     if (!cur) throw new InputError(`taak ${String(o.id)} bestaat niet (haal het dashboard opnieuw op)`);
     if (o.remove === true) { del.push(cur.id); return; }
     const t = { ...(put.find(x => x.id === cur.id) ?? cur) };
     if (o.title !== undefined) t.title = checkTitle(o.title);
     if (o.category !== undefined) t.category = checkCategory(o.category);
-    if (o.note !== undefined) t.note = o.note === null ? null : checkNote(o.note);
+    if (o.note !== undefined || o.step !== undefined) {
+      const was = splitNote(t.note);
+      t.note = joinNote(o.note === undefined ? was.note : o.note === null ? null : checkNote(o.note), o.step === undefined ? was.step : o.step === null ? null : checkStep(o.step));
+    }
     if (o.due !== undefined) { if (o.due === null) { t.dueAt = null; t.hasTime = false; } else { const d = parseDue(o.due, now); t.dueAt = d.dueAt; t.hasTime = d.hasTime; } }
     if (o.done !== undefined) { if (typeof o.done !== 'boolean') throw new InputError('done moet true of false zijn'); if (o.done && !t.done) t.doneAt = now; if (!o.done) t.doneAt = null; t.done = o.done; }
     put.push(t);

@@ -6,7 +6,7 @@ import type { DashTask } from '../../src/tasks';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 const at = (h: number, m: number) => zonedToEpoch(2026, 10, 16, h, m)!;
-const task = (o: Partial<DashTask>): DashTask => ({ id: 'a1', title: 'Bel de bank', category: 'thuis', due: null, when: '', note: '', state: 'now', ...o });
+const task = (o: Partial<DashTask>): DashTask => ({ id: 'a1', title: 'Bel de bank', category: 'thuis', due: null, when: '', note: '', step: '', state: 'now', ...o });
 
 describe('<TaskBoard />', () => {
   it('shows the task for now big, with its note, and the next ones under "Daarna"', () => {

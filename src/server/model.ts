@@ -9,6 +9,8 @@ import { addDays, localParts, zonedToEpoch, TIME_ZONE } from './time.js';
 
 export const CATEGORIES = ['werk', 'sport', 'thuis', 'prive'] as const;
 export type Category = (typeof CATEGORIES)[number];
+import { STEP_MAX } from '../steps.js';
+export { STEP_MAX };
 export const TITLE_MAX = 60, NOTE_MAX = 100, BATCH_MAX = 50;
 
 export interface Task {
@@ -34,6 +36,13 @@ export function checkNote(v: unknown): string {
   const t = v.trim();
   if (!t) throw new InputError('note mag niet leeg zijn (laat hem weg, of gebruik null om te wissen)');
   if ([...t].length > NOTE_MAX) throw new InputError(`note te lang (max ${NOTE_MAX} tekens)`);
+  return t;
+}
+export function checkStep(v: unknown): string {
+  if (typeof v !== 'string') throw new InputError('step moet tekst zijn');
+  const t = v.trim();
+  if (!t) throw new InputError('step mag niet leeg zijn (laat hem weg, of gebruik null om te wissen)');
+  if ([...t].length > STEP_MAX) throw new InputError(`step te lang (max ${STEP_MAX} tekens): één kleine eerste handeling`);
   return t;
 }
 export function checkCategory(v: unknown): Category {

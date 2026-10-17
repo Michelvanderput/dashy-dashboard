@@ -158,6 +158,20 @@ Het scherm wacht niet tot je iets opent: op drie momenten komt er in plaats van 
 
 Het weet alleen wat je erin zet: wat niet in je taken staat, kan het ook niet melden. Het blijft op het scherm; berichten naar je telefoon zitten er niet in.
 
+## Voor ADHD en verslaving: beginnen, de avond en rust
+
+Dashy is geen behandeling, maar een hulpmiddel dat de pijnpunten verkleint: beginnen, tijd zien, de lege avond en slapen. Alles hieronder is rustig van toon: geen schuld, geen streaks, geen tellers.
+
+- **Eerste stap.** Elke taak kan een kleine eerste handeling hebben ("Open de mail van de bank"), groot in beeld onder de titel. Claude maakt die bij een braindump (`step` bij `add_tasks` en `update_tasks`, max 80 tekens). Er is geen nieuwe tabelkolom nodig: de stap staat in de notitie, achter een `▸`.
+- **Doe 10 min.** Een knop naast Klaar start een werksessie: een slinkende ring, "Alleen dit stukje. Daarna mag je stoppen", Dashy gaat mee "werken". Is de tijd om, dan kies je nog 10 min, Klaar of Stoppen. Na 90 minuten aan één stuk staat er één keer "Even drinken of eten?".
+- **Even lastig.** Een knop onderaan opent een stil scherm voor als de trek of verveling komt: een kwartier met een rustige ademcirkel en zachte woorden ("Dit gaat voorbij. Een golf komt op en zakt weer."), met je eigen plan eronder. Dat plan schrijf je zelf, op een goed moment, bij de eerste keer: wat je doet als het lastig wordt, plus je ene ding voor vanavond. Daarna kun je altijd "Nog een kwartier" nemen of "Ik ben er doorheen" tikken.
+- **De basis.** Vier stille vinkjes (eten, drinken, buiten, medicijnen), alleen van vandaag; morgen zijn ze leeg en er wordt niets onthouden of geteld. Eigen lijst: `VITE_BASICS=eten, drinken, buiten`.
+- **Avond.** De avondcheck herinnert aan jouw ene ding voor vanavond, en zegt in vrije tijd dat een lege avond zwaarder is dan een gekozen avond.
+- **Nieuwe dag.** 's Ochtends toont het scherm maximaal drie dingen, met "een nieuwe dag, een schoon begin". Gisteren komt niet terug als verwijt.
+- **Afbouwen.** Vanaf 22:30 wordt het scherm dimmer, Dashy slaperig, de muziekkaart verdwijnt (tenzij er iets speelt) en er staat "tot morgen: je begint met…". Tijd instellen met `VITE_WINDDOWN=22:00`, uitzetten met `VITE_WINDDOWN=uit`.
+
+**Privacy.** Je plan, de wave-timer, de vinkjes en de werksessie staan alleen in de opslag van dat ene apparaat. Ze gaan niet naar de server, niet naar Supabase en niet naar Claude. Dat betekent ook dat ze per apparaat verschillen, en dat ze weg zijn als je de browsergegevens wist.
+
 ## Afspraak en dagbalk op het scherm
 
 Onder Dashy staat je dag in één oogopslag (`src/day.ts`, `DayPanel`):

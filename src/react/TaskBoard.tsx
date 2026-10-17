@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { taskTiming } from '../day';
 import type { Briefing } from '../briefing';
+import { FOCUS_CHOICES, type FocusView } from '../focus';
 import type { DashTask } from '../tasks';
 import { useMinute } from './useMinute';
 
@@ -23,6 +24,11 @@ export interface TaskBoardProps {
   notes?: string[];
   /** The moment of the day (morning plan, afternoon nudge, evening check-in). Takes the place of the "Daarna" list. */
   plan?: Briefing | null;
+  /** A running working session ("do 10 minutes") on the task for now, and what you can do with it. Without handlers it is only shown. */
+  focus?: FocusView | null;
+  onFocusStart?: (minutes: number) => void;
+  onFocusExtend?: (minutes: number) => void;
+  onFocusStop?: () => void;
   /** Smaller, for a low screen. */
   compact?: boolean;
   /** How much to leave out so it fits: 0 all, 1 smaller, 2 also no list, 3 also no note, 4 only the title. Set by the page (useFit). */
@@ -53,6 +59,15 @@ const CSS = `
 .tb-done{justify-self:start;display:inline-flex;align-items:center;gap:10px;min-height:56px;padding:0 30px;margin-top:4px;border:0;border-radius:999px;background:var(--ink);color:var(--bg);font:inherit;font-weight:650;font-size:1.1rem;cursor:pointer;transition:transform .12s,filter .15s}
 .tb-done:hover{filter:brightness(1.18)}.tb-done:active{transform:scale(.97)}
 .tb-done:focus-visible,.tb-link:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.tb-step{margin:0;padding:8px 12px;border-radius:12px;background:color-mix(in srgb,var(--cat,currentColor) 14%,transparent);font-size:clamp(1rem,2.4vmin,1.3rem);display:grid;gap:2px}
+.tb-step span{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;opacity:.65}
+.tb-actions,.tb-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.tb-ghost{min-height:44px;padding:0 20px;border-radius:999px;border:1.5px solid var(--line);background:none;color:inherit;font:inherit;font-weight:550;cursor:pointer}
+.tb-ghost:hover{border-color:currentColor}.tb-ghost:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.tb-focus{display:flex;gap:14px;align-items:center;margin-top:4px}.tb-ring{flex:none}
+.tb-focus-text{display:grid;gap:6px;min-width:0}.tb-focus-text p{margin:0;opacity:.8}.tb-break{opacity:1!important;font-weight:600}
+.tb-l4 .tb-ring{width:44px;height:44px}.tb-l4 .tb-focus{margin:0;gap:10px}.tb-l4 .tb-ghost{min-height:36px;padding:0 14px}
+.tb-l3 .tb-step,.tb-l4 .tb-step{display:none}.tb-l4 .tb-focus-text p{display:none}.tb-compact .tb-focus-text>p:not(.tb-break){display:none}
 .tb-sub{margin:0 0 6px;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;font-weight:500}
 .tb-plan h3{margin:0 0 6px;font-size:clamp(1.3rem,3.6vmin,2.2rem);font-weight:700;letter-spacing:-.02em;line-height:1.15}
 .tb-plan p{margin:0 0 10px;opacity:.6;font-size:clamp(.9rem,2vmin,1.1rem)}
@@ -81,6 +96,17 @@ const CSS = `
 @media (prefers-reduced-motion:reduce){.tb-hero,.tb-toast{animation:none}.tb-done{transition:none}}
 `;
 
+/** A ring that empties while the time runs down, with the time (or a word) in it. */
+const Ring = ({ fraction, label }: { fraction: number; label: string }) => {
+  const r = 26, c = 2 * Math.PI * r;
+  return (
+    <svg className="tb-ring" width="68" height="68" viewBox="0 0 68 68" role="img" aria-label={label}>
+      <circle cx="34" cy="34" r={r} fill="none" stroke="currentColor" strokeOpacity=".18" strokeWidth="5" />
+      <circle cx="34" cy="34" r={r} fill="none" stroke="var(--cat,currentColor)" strokeWidth="5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, fraction)))} transform="rotate(-90 34 34)" />
+      <text x="34" y="39" textAnchor="middle" fontSize={label.length > 5 ? 11 : 15} fill="currentColor" style={{ fontVariantNumeric: 'tabular-nums' }}>{label}</text>
+    </svg>
+  );
+};
 const Check = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 const when = (t: DashTask, now: number) => taskTiming(t, now).chip ?? '';
 
@@ -88,7 +114,7 @@ const when = (t: DashTask, now: number) => taskTiming(t, now).chip ?? '';
  * The tasks, built to be read from across a room: what to do now, big, with its time and its note and one big button; then what comes after.
  * Calm on purpose: a time that has passed says "nog open", and nothing here counts what you did not do.
  */
-export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftOpen = 0, doneToday = 0, onComplete, justDone, onUndo, notes = [], plan = null, compact = false, level = 0, style }: TaskBoardProps) {
+export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftOpen = 0, doneToday = 0, onComplete, justDone, onUndo, notes = [], plan = null, focus = null, onFocusStart, onFocusExtend, onFocusStop, compact = false, level = 0, style }: TaskBoardProps) {
   compact = compact || level >= 1;
   const live = useMinute();
   const now = fixed ?? live;
@@ -111,8 +137,29 @@ export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftO
               {timing!.passed && <span className="tb-chip tb-quiet">nog open</span>}
             </div>
           )}
+          {hero.step && <p className="tb-step"><span>Eerste stap</span>{hero.step}</p>}
           {hero.note && <p className="tb-note">{hero.note}</p>}
-          {onComplete && <button type="button" className="tb-done" onClick={() => void onComplete(hero.id)}><Check />Klaar</button>}
+          {focus ? (
+            <div className="tb-focus" role="group" aria-label="Werken in een stuk">
+              <Ring fraction={focus.fraction} label={focus.over ? 'Tijd om' : focus.mmss} />
+              <div className="tb-focus-text">
+                <p>{focus.over ? 'De tijd is om. Je mag stoppen, of nog een stuk doen.' : 'Alleen dit stukje. Daarna mag je stoppen.'}</p>
+                {focus.suggestBreak && <p className="tb-break">Je zit al {focus.elapsedMin} min door. Even drinken of eten?</p>}
+                {(onFocusStop || onFocusExtend || onComplete) && (
+                  <div className="tb-focus-actions">
+                    {focus.over && onFocusExtend && <button type="button" className="tb-ghost" onClick={() => onFocusExtend(10)}>Nog 10 min</button>}
+                    {focus.over && onComplete && <button type="button" className="tb-ghost" onClick={() => void onComplete(hero.id)}>Klaar</button>}
+                    {onFocusStop && <button type="button" className="tb-ghost" onClick={onFocusStop}>{focus.over ? 'Stoppen' : 'Stop'}</button>}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (onComplete || onFocusStart) && (
+            <div className="tb-actions">
+              {onComplete && <button type="button" className="tb-done" onClick={() => void onComplete(hero.id)}><Check />Klaar</button>}
+              {onFocusStart && FOCUS_CHOICES.slice(0, 1).map(m => <button key={m} type="button" className="tb-ghost" onClick={() => onFocusStart(m)}>Doe {m} min</button>)}
+            </div>
+          )}
         </article>
       ) : (
         <div className="tb-hero"><header className="tb-label"><span>Nu doen</span></header><h2 className="tb-title tb-calm">Niets nu. Rust maar.</h2></div>
@@ -121,7 +168,7 @@ export function TaskBoard({ tasks, now: fixed, mode = 'work', waiting = 0, leftO
         <section className="tb-plan" aria-label={plan.title}>
           <h3>= {plan.title}</h3>
           <p>{plan.lead}</p>
-          <ol>{plan.items.map(i => <li key={i}>{i}</li>)}</ol>
+          {plan.items.length > 0 && <ol>{plan.items.map(i => <li key={i}>{i}</li>)}</ol>}
         </section>
       ) : next.length > 0 && (
         <div>

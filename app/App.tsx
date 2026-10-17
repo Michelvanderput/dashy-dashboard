@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useFit, useMinute, useSpotify, useWakeLock } from '../src/react';
-import { briefing, burnInOffset, isKiosk, parsePlace, type DashyState } from '../src';
+import { BasicsCheck, CalmPanel, Clock, DayPanel, Dashy, HoursPanel, NowPlayingBlock, TaskBoard, WeatherView, useDashyTasks, useFit, useMinute, useSpotify, useStored, useWakeLock } from '../src/react';
+import { briefing, burnInOffset, clockParts, EMPTY_PLAN, extendFocus, focusView, isKiosk, isWindDown, nowTask, parseBasics, parseBasicsState, parseCalmPlan, parseFocus, parsePlace, parseWave, parseWindDown, startFocus, toggleBasic, type DashyState } from '../src';
 
 import { PairForm } from './PairForm';
 import { initialConnection } from './storage';
@@ -13,6 +13,8 @@ function useMediaQuery(query: string): boolean {
   return on;
 }
 
+const BASICS = parseBasics(env.VITE_BASICS); // "eten, drinken, buiten": the ticks of the day
+const WIND_DOWN = parseWindDown(env.VITE_WINDDOWN); // "22:30" or "uit"
 const PLACE = parsePlace(env.VITE_WEATHER_PLACE); // "Maastricht:50.85,5.69"; the weather is for this place only
 
 export function App() {
@@ -33,19 +35,38 @@ export function App() {
   const toggleAwake = () => { const n = !awake; setAwake(n); try { localStorage.setItem('dashy.awake', n ? '1' : '0'); } catch { /* private mode */ } };
   const sp = useSpotify({ clientId: spotifyId ?? 'not-configured', redirectUri });
   const nowPlaying = spotifyId ? sp.nowPlaying : null;
-  const showMusic = !kiosk || !!nowPlaying; // a screen to look at has no use for an empty "Spotify is not connected" card
-
   // His mood follows your real tasks (driver rules); music only makes a calm Dashy dance.
   const [conn] = useState(initialConnection);
   const tasks = useDashyTasks({ url: conn?.url, token: conn?.token, actionUrl: conn?.actionUrl, actionToken: conn?.actionToken });
-  const state: DashyState = nowPlaying?.playing && tasks.state === 'idle' ? 'dancing' : tasks.state;
   const snap = tasks.snapshot, minute = useMinute();
   // free time: after the working day and on days off the whole screen turns warmer (see the styles in index.html)
   const mode = snap?.mode ?? 'work';
   useEffect(() => { document.documentElement.dataset.mode = mode; return () => { delete document.documentElement.dataset.mode; }; }, [mode]);
+  // winding down: from the set time the screen dims and Dashy gets sleepy; the music block goes unless something is playing
+  const winding = isWindDown(minute, WIND_DOWN);
+  useEffect(() => { document.documentElement.toggleAttribute('data-wind', winding); return () => document.documentElement.removeAttribute('data-wind'); }, [winding]);
+  const showMusic = (!kiosk || !!nowPlaying) && (!winding || !!nowPlaying);
+
+  // all of this stays on this device (never sent to the server or to Claude)
+  const [focusRaw, setFocus] = useStored('dashy.focus', t => parseFocus(t, Date.now()), f => (f ? JSON.stringify(f) : null));
+  const [plan, setPlan] = useStored('dashy.calm', parseCalmPlan);
+  const [wave, setWave] = useStored<number | null>('dashy.calm.wave', t => parseWave(t, Date.now()), w => (w === null ? null : String(w)));
+  const [basicsRaw, setBasics] = useStored('dashy.basics', t => parseBasicsState(t, clockParts(Date.now()).iso.slice(0, 10)));
+  const [calmOpen, setCalmOpen] = useState(false);
+  const today = clockParts(minute).iso.slice(0, 10);
+  const basics = basicsRaw.day === today ? basicsRaw : parseBasicsState(null, today);
+  const hero = nowTask(snap);
+  const focus = focusRaw && (!focusRaw.taskId || focusRaw.taskId === hero?.id) ? focusRaw : null; // a session belongs to its task
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => { if (!focus) return; setTick(Date.now()); const id = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(id); }, [focus?.startedAt, focus?.minutes]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (focusRaw && !focus && snap) setFocus(null); }, [focusRaw, focus, snap]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fv = focus ? focusView(focus, tick) : null;
+  const openCalm = () => { if (wave === null || Date.now() - wave > 2 * 3600_000) setWave(Date.now()); setCalmOpen(true); };
+  const closeCalm = () => { setCalmOpen(false); setWave(null); };
+  const state: DashyState = fv && !fv.over ? 'working' : nowPlaying?.playing && tasks.state === 'idle' && !winding ? 'dancing' : winding && tasks.state === 'idle' ? 'sleepy' : tasks.state;
   // nothing scrolls: when a block does not fit, it shows less (see useFit)
   const fitKey = `${snap?.tasks.map(t => t.id).join()}|${snap?.appointment?.at}|${!!nowPlaying}|${low}|${kiosk}`;
-  const fitLeft = useFit<HTMLDivElement>(2, fitKey), fitMusic = useFit<HTMLElement>(3, fitKey);
+  const fitLeft = useFit<HTMLDivElement>(3, fitKey), fitMusic = useFit<HTMLElement>(3, fitKey);
   const fitTasks = useFit<HTMLDivElement>(4, `${fitKey}|${fitLeft.level}|${fitMusic.level}`);
   const notes = [
     ...(tasks.lastOkAt && tasks.stale && !tasks.error ? [`Niet bijgewerkt sinds ${new Date(tasks.lastOkAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`] : []),
@@ -53,6 +74,7 @@ export function App() {
   ];
 
   return (
+    <>
     <main className={`dash${showMusic ? '' : ' nomusic'}`} style={{ padding: 'calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-top)) calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-right)) calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-bottom)) calc(clamp(12px,2.2vmin,28px) + env(safe-area-inset-left))', transform: kiosk ? `translate(${shift.x}px, ${shift.y}px)` : undefined, transition: 'transform 4s ease' }}>
       <h1 className="sr">Dashy</h1>
       <header className="dash-head">
@@ -66,6 +88,7 @@ export function App() {
           <div><Dashy size="100%" state={state} ambient={1.5} perspective={1.4} /></div>
         </section>
         <div className="dash-day">
+          {fitLeft.level < 3 && <BasicsCheck items={BASICS} done={basics.done} compact={low} onToggle={!kiosk ? i => setBasics(toggleBasic(basics, i)) : undefined} style={{ marginBottom: 10 }} />}
           {tasks.connected && snap && fitLeft.level < 2 && <DayPanel appointment={snap.appointment} workday={snap.workday} />}
           {tasks.connected && snap && fitLeft.level < 1 && <HoursPanel hours={snap.hours} workday={snap.workday} compact={low} style={{ marginTop: low ? 8 : 12 }} />}
         </div>
@@ -73,7 +96,7 @@ export function App() {
 
       <div className="dash-tasks" ref={fitTasks.ref}>
         {tasks.connected && snap ? (
-          <TaskBoard plan={briefing(snap, minute)} tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} level={fitTasks.level} notes={notes}
+          <TaskBoard focus={fv} onFocusStart={!kiosk && hero ? m => setFocus(startFocus(Date.now(), m, hero.id)) : undefined} onFocusExtend={!kiosk && focus ? m => setFocus(extendFocus(focus, m)) : undefined} onFocusStop={!kiosk && focus ? () => setFocus(null) : undefined} plan={briefing(snap, minute, { windDownMin: WIND_DOWN, evening: plan.evening })} tasks={snap.tasks} mode={mode} waiting={snap.waiting} leftOpen={snap.leftOpen.length} doneToday={snap.doneToday} compact={low} level={fitTasks.level} notes={notes}
             onComplete={!kiosk ? tasks.complete : undefined} justDone={!kiosk ? tasks.justDone : null} onUndo={!kiosk ? tasks.undo : undefined} />
         ) : tasks.connected ? (
           <p role="status" style={{ margin: 0, opacity: .6 }}>{tasks.error ?? 'Taken laden…'}</p>
@@ -94,6 +117,7 @@ export function App() {
       </section>}
 
       <footer className="dash-foot">
+        <button type="button" className="dash-calm" onClick={openCalm}>Even lastig</button>
         {!kiosk && (
           <>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}><input type="checkbox" checked={awake} onChange={toggleAwake} /> Scherm aan laten</label>
@@ -104,6 +128,8 @@ export function App() {
         {awake && wake.error && <span role="status">{wake.error}</span>}
       </footer>
     </main>
+    {calmOpen && <CalmPanel plan={plan} onSavePlan={setPlan} waveStart={wave} onRestartWave={() => setWave(Date.now())} onClose={closeCalm} />}
+    </>
   );
 }
 
